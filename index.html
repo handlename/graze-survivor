@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>DODGE SURVIVOR</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <div class="cabinet" id="cabinet">
+        <canvas id="game-canvas" aria-label="DODGE SURVIVOR playfield"></canvas>
+
+        <!-- Title Screen Overlay -->
+        <section id="title-overlay" class="overlay active">
+          <div class="overlay-card">
+            <h1 class="eva-title">DODGE SURVIVOR</h1>
+            <p class="best-line" id="title-best">BEST SCORE: 0</p>
+            <button id="btn-start" type="button" class="primary-btn">START GAME</button>
+          </div>
+        </section>
+
+        <!-- Result Screen Overlay -->
+        <section id="result-overlay" class="overlay">
+          <div class="overlay-card result-card-container">
+            <div id="result-banner" class="eva-result-heading">作戦終了・戦果報告</div>
+            <img
+              id="result-card-preview"
+              class="result-card-preview"
+              alt="Result Summary Card"
+            />
+            <div class="result-actions">
+              <button id="btn-share" type="button" class="primary-btn">SHARE RESULT</button>
+              <button id="btn-retry" type="button" class="secondary-btn">PLAY AGAIN</button>
+            </div>
+            <div class="ranking-box">
+              <div class="ranking-header">LOCAL RANKING</div>
+              <ol id="ranking-list" class="ranking-list"></ol>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Live Options Panel (Visible on Title & Result screens only) -->
+      <aside id="options-panel" class="options-panel">
+        <div class="option-row">
+          <span class="option-label">CONTROL MODE</span>
+          <div class="btn-group">
+            <button id="btn-mode-swipe" type="button" class="toggle-btn active">SWIPE</button>
+            <button id="btn-mode-gyro" type="button" class="toggle-btn">GYRO</button>
+          </div>
+        </div>
+
+        <div id="swipe-controls" class="control-subpanel">
+          <label class="slider-row" for="slider-speed">
+            <span>SPEED</span>
+            <span id="val-speed">1.2</span>
+            <input
+              id="slider-speed"
+              type="range"
+              min="0.5"
+              max="2.5"
+              step="0.1"
+              value="1.2"
+            />
+          </label>
+          <label class="slider-row" for="slider-accel">
+            <span>ACCEL</span>
+            <span id="val-accel">0.8</span>
+            <input
+              id="slider-accel"
+              type="range"
+              min="0.0"
+              max="2.0"
+              step="0.1"
+              value="0.8"
+            />
+          </label>
+        </div>
+
+        <div id="gyro-controls" class="control-subpanel hidden">
+          <label class="slider-row" for="slider-gyro">
+            <span>SENSITIVITY</span>
+            <span id="val-gyro">4.5</span>
+            <input
+              id="slider-gyro"
+              type="range"
+              min="1.0"
+              max="10.0"
+              step="0.5"
+              value="4.5"
+            />
+          </label>
+          <div class="option-row">
+            <button id="btn-rev-x" type="button" class="toggle-btn">REVERSE X: OFF</button>
+            <button id="btn-rev-y" type="button" class="toggle-btn">REVERSE Y: OFF</button>
+            <button id="btn-reset-center" type="button" class="toggle-btn">[ RESET CENTER ]</button>
+          </div>
+        </div>
+
+        <div class="option-row">
+          <button id="btn-sound" type="button" class="toggle-btn active">SOUND: ON</button>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -16,6 +16,7 @@ import {
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
   type CutInEffect,
+  type GamePhase,
   type GameState,
   type GrazeSample,
   type Hazard,
@@ -259,7 +260,7 @@ export function stepGame(
   let comboGauge = state.comboGauge;
   let totalGrazeCount = state.totalGrazeCount;
   let lives = state.lives;
-  let phase = state.phase;
+  let phase: GamePhase = state.phase;
   let nextInvulnerableMs = invulnerableMs;
   let screenShakeMs = Math.max(0, state.screenShakeMs - dtMs);
   let hitFlashMs = Math.max(0, state.hitFlashMs - dtMs);
