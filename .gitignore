@@ -1,0 +1,6 @@
+node_modules/
+dist/
+certs/
+.superpowers/
+.DS_Store
+*.local
