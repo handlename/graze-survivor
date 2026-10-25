@@ -1,7 +1,5 @@
 import { getBombPhase, getLaserPhase } from '../core/hazards';
 import {
-  CORE_RADIUS,
-  GRAZE_RADIUS,
   HUD_HEIGHT,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
@@ -12,7 +10,12 @@ import {
   type PeakMomentSnapshot,
   type RankingRecord,
 } from '../core/types';
-import { drawStretchedMincho } from './renderer';
+import {
+  drawPersonaRansomBanner,
+  drawStarSpark,
+  drawStretchedMincho,
+  renderPlayerShipAndRing,
+} from './renderer';
 import { formatSurvivalTime } from './storage';
 
 export const PUBLIC_GAME_URL = 'https://handlename.github.io/dodge-survivor/';
@@ -31,13 +34,14 @@ function renderPeakSnapshotCrop(
   ctx.rect(boxX, boxY, boxW, boxH);
   ctx.clip();
 
-  ctx.fillStyle = '#06060b';
+  ctx.fillStyle = '#090204';
   ctx.fillRect(boxX, boxY, boxW, boxH);
 
   const player = snapshot ? snapshot.player : fallbackState.player;
   const hazards = snapshot ? snapshot.hazards : fallbackState.hazards;
   const sparks = snapshot ? snapshot.sparks : fallbackState.sparks;
   const popups = snapshot ? snapshot.popups : fallbackState.popups;
+  const combo = snapshot ? snapshot.comboMultiplier : fallbackState.maxCombo;
 
   const cropW = 180;
   const cropH = 260;
@@ -56,30 +60,15 @@ function renderPeakSnapshotCrop(
   ctx.scale(scaleX, scaleY);
   ctx.translate(-camX, -camY);
 
-  ctx.strokeStyle = 'rgba(255, 153, 0, 0.14)';
-  ctx.lineWidth = 0.75;
-  for (let x = 0; x <= LOGICAL_WIDTH; x += 36) {
-    ctx.beginPath();
-    ctx.moveTo(x, HUD_HEIGHT);
-    ctx.lineTo(x, LOGICAL_HEIGHT);
-    ctx.stroke();
+  // Halftone background dots
+  ctx.fillStyle = 'rgba(230, 0, 18, 0.2)';
+  for (let gx = 14; gx < LOGICAL_WIDTH; gx += 24) {
+    for (let gy = HUD_HEIGHT + 14; gy < LOGICAL_HEIGHT; gy += 24) {
+      ctx.beginPath();
+      ctx.arc(gx, gy, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  for (let y = HUD_HEIGHT; y <= LOGICAL_HEIGHT; y += 36) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(LOGICAL_WIDTH, y);
-    ctx.stroke();
-  }
-
-  drawStretchedMincho(
-    ctx,
-    '極限瞬間',
-    camX,
-    camY - 62,
-    34,
-    'rgba(255, 153, 0, 0.22)',
-    1.42
-  );
 
   for (const h of hazards) {
     if (h.kind === 'BOMB') {
@@ -87,25 +76,25 @@ function renderPeakSnapshotCrop(
       if (b.elapsedMs < 0) continue;
       const info = getBombPhase(b);
       if (info.phase === 'CONVERGING') {
-        ctx.fillStyle = 'rgba(255, 60, 0, 0.08)';
-        ctx.strokeStyle = 'rgba(255, 190, 0, 0.85)';
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = 'rgba(230, 0, 18, 0.08)';
+        ctx.strokeStyle = '#ffe600';
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.arc(b.x, b.y, info.currentRingRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       } else if (info.phase === 'HOLD') {
-        ctx.fillStyle = 'rgba(255, 40, 0, 0.22)';
-        ctx.strokeStyle = '#ffcc00';
+        ctx.fillStyle = 'rgba(230, 0, 18, 0.24)';
+        ctx.strokeStyle = '#ffe600';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       } else if (info.phase === 'ACTIVE') {
-        ctx.fillStyle = 'rgba(255, 80, 0, 0.72)';
+        ctx.fillStyle = 'rgba(230, 0, 18, 0.78)';
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.2;
+        ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
@@ -130,14 +119,14 @@ function renderPeakSnapshotCrop(
         ctx.stroke();
         ctx.restore();
       } else if (phase === 'ACTIVE') {
-        ctx.strokeStyle = 'rgba(255, 0, 85, 0.42)';
+        ctx.strokeStyle = 'rgba(230, 0, 18, 0.45)';
         ctx.lineWidth = l.halfWidth * 3.2;
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
         ctx.lineTo(l.x2, l.y2);
         ctx.stroke();
 
-        ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+        ctx.strokeStyle = '#ffe600';
         ctx.lineWidth = l.halfWidth * 2;
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
@@ -157,24 +146,29 @@ function renderPeakSnapshotCrop(
   for (const h of hazards) {
     if (h.kind === 'BULLET') {
       const b = h as BulletHazard;
-      ctx.fillStyle = '#ff5500';
+      ctx.fillStyle = '#e60012';
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.radius + 1.2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#ffffcc';
+      ctx.fillStyle = '#ffe600';
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.radius * 0.55, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  for (const s of sparks) {
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(s.x, s.y);
-    ctx.lineTo(s.x - s.vx * 0.035, s.y - s.vy * 0.035);
-    ctx.stroke();
+  for (let i = 0; i < sparks.length; i++) {
+    const s = sparks[i];
+    if (i % 2 === 0) {
+      drawStarSpark(ctx, s.x, s.y, 5, '#ffe600', i * 0.6, 0.9);
+    } else {
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x - s.vx * 0.035, s.y - s.vy * 0.035);
+      ctx.stroke();
+    }
   }
   for (const p of popups) {
     drawStretchedMincho(
@@ -183,53 +177,33 @@ function renderPeakSnapshotCrop(
       p.x,
       p.y,
       p.isCritical ? 12 : 10,
-      p.color,
+      p.isCritical ? '#ffe600' : '#00ffee',
       1.3,
       'center',
-      3.0,
+      3.2,
       '#000000'
     );
   }
 
-  ctx.strokeStyle = '#00ffee';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, GRAZE_RADIUS, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(player.x, player.y - 10);
-  ctx.lineTo(player.x + 7, player.y + 7);
-  ctx.lineTo(player.x, player.y + 3.5);
-  ctx.lineTo(player.x - 7, player.y + 7);
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.fillStyle = '#00ffee';
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, CORE_RADIUS, 0, Math.PI * 2);
-  ctx.fill();
+  renderPlayerShipAndRing(ctx, player.x, player.y, 3, combo, 1.0, 1000);
 
   ctx.restore();
 
-  ctx.fillStyle = 'rgba(9, 7, 6, 0.84)';
+  ctx.fillStyle = 'rgba(5, 2, 3, 0.9)';
   ctx.fillRect(boxX, boxY + boxH - 36, boxW, 36);
-  ctx.strokeStyle = '#ff9900';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-  ctx.fillStyle = '#ffcc00';
-  ctx.font = 'bold 11px monospace';
+  ctx.fillStyle = '#ffe600';
+  ctx.font = '900 11px monospace';
   ctx.textAlign = 'left';
   const peakRate = snapshot ? snapshot.windowScoreRatePerSec : 0;
   ctx.fillText(`PEAK: +${peakRate.toLocaleString('en-US')} PTS/s`, boxX + 8, boxY + boxH - 20);
-  ctx.fillStyle = '#00ffee';
-  ctx.font = '10px monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 10px monospace';
   const peakTime = snapshot ? formatSurvivalTime(snapshot.timeMs) : '00:00.000';
-  const peakCombo = snapshot ? snapshot.comboMultiplier.toFixed(1) : '1.0';
-  ctx.fillText(`AT ${peakTime} (×${peakCombo})`, boxX + 8, boxY + boxH - 6);
+  ctx.fillText(`AT ${peakTime} (×${combo.toFixed(1)})`, boxX + 8, boxY + boxH - 6);
 }
 
 export function renderResultCardCanvas(
@@ -243,93 +217,100 @@ export function renderResultCardCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  ctx.fillStyle = '#090706';
+  // Persona Crimson & Pitch-Black Diagonal Split Backdrop
+  ctx.fillStyle = '#070204';
   ctx.fillRect(0, 0, 600, 400);
 
-  ctx.save();
-  for (let x = -40; x < 640; x += 24) {
-    ctx.fillStyle = Math.floor(x / 24) % 2 === 0 ? '#ff9900' : '#000000';
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + 14, 0);
-    ctx.lineTo(x + 4, 14);
-    ctx.lineTo(x - 10, 14);
-    ctx.closePath();
-    ctx.fill();
+  ctx.fillStyle = '#e60012';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(390, 0);
+  ctx.lineTo(310, 400);
+  ctx.lineTo(0, 400);
+  ctx.closePath();
+  ctx.fill();
 
-    ctx.beginPath();
-    ctx.moveTo(x, 386);
-    ctx.lineTo(x + 14, 386);
-    ctx.lineTo(x + 4, 400);
-    ctx.lineTo(x - 10, 400);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
+  ctx.fillStyle = '#080204';
+  ctx.beginPath();
+  ctx.moveTo(10, 12);
+  ctx.lineTo(372, 12);
+  ctx.lineTo(298, 388);
+  ctx.lineTo(10, 388);
+  ctx.closePath();
+  ctx.fill();
 
-  ctx.strokeStyle = '#ff9900';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(2, 16, 596, 368);
-
-  drawStretchedMincho(
+  drawPersonaRansomBanner(
     ctx,
-    isNewRecord ? '最高記録更新・極限達成' : '作戦終了・戦果報告',
-    200,
-    54,
+    isNewRecord ? '最高記録更新' : '作戦終了報告',
+    190,
+    52,
     24,
-    isNewRecord ? '#ffcc00' : '#ff3300',
-    1.38
+    '#e60012',
+    1
   );
 
-  ctx.fillStyle = '#ff9900';
-  ctx.font = 'bold 13px monospace';
+  ctx.fillStyle = '#ffe600';
+  ctx.font = '900 13px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('FINAL SCORE', 28, 102);
+  ctx.fillText('FINAL SCORE', 28, 106);
 
   drawStretchedMincho(
     ctx,
     record.score.toLocaleString('en-US'),
     28,
-    144,
+    148,
     40,
     '#ffffff',
     1.3,
-    'left'
+    'left',
+    4,
+    '#e60012'
   );
 
-  ctx.fillStyle = '#ff9900';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText('SURVIVAL TIME', 28, 204);
-  ctx.fillStyle = '#00ffee';
-  ctx.font = 'bold 22px monospace';
-  ctx.fillText(formatSurvivalTime(record.survivalTimeMs), 28, 230);
+  ctx.fillStyle = '#ffe600';
+  ctx.font = '900 12px monospace';
+  ctx.fillText('SURVIVAL TIME', 28, 206);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 22px monospace';
+  ctx.fillText(formatSurvivalTime(record.survivalTimeMs), 28, 232);
 
-  ctx.fillStyle = '#ff9900';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText('MAX COMBO', 205, 204);
-  ctx.fillStyle = '#ffcc00';
-  ctx.font = 'bold 22px monospace';
-  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 205, 230);
+  ctx.fillStyle = '#ffe600';
+  ctx.font = '900 12px monospace';
+  ctx.fillText('MAX COMBO', 205, 206);
+  ctx.fillStyle = '#ffe600';
+  ctx.font = '900 22px monospace';
+  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 205, 232);
 
-  ctx.fillStyle = '#ff9900';
+  ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 12px monospace';
-  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 272);
+  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 274);
 
-  ctx.fillStyle = '#999999';
+  ctx.fillStyle = '#aaaaaa';
   ctx.font = '12px monospace';
   ctx.fillText(`TIMESTAMP: ${record.timestamp}`, 28, 304);
 
-  drawStretchedMincho(ctx, 'DODGE SURVIVOR', 28, 348, 20, '#ff9900', 1.3, 'left');
+  drawStretchedMincho(
+    ctx,
+    'DODGE SURVIVOR',
+    28,
+    350,
+    20,
+    '#ffe600',
+    1.3,
+    'left',
+    3,
+    '#000000'
+  );
 
   const mapX = 388;
-  const mapY = 50;
-  const mapW = 188;
-  const mapH = 306;
+  const mapY = 48;
+  const mapW = 190;
+  const mapH = 316;
 
-  ctx.fillStyle = '#ff9900';
-  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#ffe600';
+  ctx.font = '900 11px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('PEAK GRAZE MOMENT', mapX + mapW / 2, mapY - 8);
+  ctx.fillText('PEAK GRAZE MOMENT', mapX + mapW / 2, mapY - 10);
 
   renderPeakSnapshotCrop(ctx, mapX, mapY, mapW, mapH, state.peakMoment, state);
 
@@ -368,7 +349,6 @@ export async function shareResultImage(
   canvas: HTMLCanvasElement,
   text: string
 ): Promise<'shared' | 'fallback'> {
-  // Build PNG File synchronously from dataURL so we never lose user gesture activation on mobile Safari/Chrome
   const dataUrl = canvas.toDataURL('image/png');
   const file = dataUrlToFile(dataUrl, 'dodge-survivor-result.png');
 
@@ -384,11 +364,9 @@ export async function shareResultImage(
       if (err instanceof Error && err.name === 'AbortError') {
         return 'shared';
       }
-      // Fall through to download + intent on error
     }
   }
 
-  // Fallback for non-HTTPS or desktop browsers: download the result card PNG + open X share / copy text
   if (typeof document !== 'undefined') {
     const a = document.createElement('a');
     a.href = dataUrl;

@@ -4,7 +4,6 @@ import {
   GAME_OVER_EXPLOSION_MS,
   GRAZE_RADIUS,
   HUD_HEIGHT,
-  INITIAL_LIVES,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
   type BombHazard,
@@ -43,6 +42,245 @@ export function drawStretchedMincho(
   }
   ctx.fillStyle = color;
   ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+export function drawPersonaRansomBanner(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  centerY: number,
+  sizePx: number,
+  accentColor: string,
+  alpha = 1
+): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(centerX, centerY);
+  ctx.rotate(-0.14);
+
+  // Diagonal jagged slash ribbon behind the characters
+  ctx.fillStyle = accentColor;
+  ctx.beginPath();
+  ctx.moveTo(-220, -sizePx * 0.78);
+  ctx.lineTo(220, -sizePx * 0.92);
+  ctx.lineTo(205, sizePx * 0.85);
+  ctx.lineTo(-210, sizePx * 0.72);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  const chars = Array.from(text);
+  const stepX = sizePx * 1.04;
+  const startX = -((chars.length - 1) * stepX) / 2;
+
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    ctx.save();
+    const ox = startX + i * stepX;
+    const oy = (i % 2 === 0 ? -1 : 1) * 2.5;
+    ctx.translate(ox, oy);
+    ctx.rotate((i % 2 === 0 ? -1 : 1) * 0.085);
+
+    const boxW = sizePx * 1.06;
+    const boxH = sizePx * 1.28;
+    const isEven = i % 2 === 0;
+    ctx.fillStyle = isEven ? '#000000' : '#ffffff';
+    ctx.strokeStyle = isEven ? '#ffffff' : '#000000';
+    ctx.lineWidth = 2;
+    ctx.fillRect(-boxW / 2, -boxH / 2, boxW, boxH);
+    ctx.strokeRect(-boxW / 2, -boxH / 2, boxW, boxH);
+
+    ctx.scale(1, 1.32);
+    ctx.fillStyle = isEven ? '#ffffff' : '#000000';
+    ctx.font = `900 ${sizePx * 0.82}px ${MINCHO_FONT_FAMILY}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ch, 0, 1);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+export function drawStarSpark(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  color: string,
+  rotation: number,
+  alpha = 1
+): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? radius : radius * 0.28;
+    const a = (i * Math.PI) / 4;
+    if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+export function renderPlayerShipAndRing(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  lives: number,
+  comboMultiplier: number,
+  comboGauge: number,
+  survivalTimeMs: number
+): void {
+  // 1. Graze Ring Track (GRAZE_RADIUS = 24)
+  const isGrazingHot = comboGauge > 0.82;
+  ctx.strokeStyle = isGrazingHot ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.22)';
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.arc(x, y, GRAZE_RADIUS, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 2. Dynamic Combo Gauge Arc directly on the Graze Ring
+  if (comboGauge > 0) {
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + Math.PI * 2 * Math.max(0, Math.min(1, comboGauge));
+    ctx.strokeStyle = comboMultiplier >= 20 ? '#ffe600' : '#00ffee';
+    ctx.lineWidth = isGrazingHot ? 4.8 : 3.8;
+    ctx.beginPath();
+    ctx.arc(x, y, GRAZE_RADIUS, startAngle, endAngle);
+    ctx.stroke();
+  }
+
+  // 3. Persona-Style Skewed Combo Multiplier Badge attached to Player's Graze Ring
+  if (comboMultiplier > 1.0 || comboGauge > 0) {
+    const badgeRight = x < LOGICAL_WIDTH - 68 ? 1 : -1;
+    const bx = x + badgeRight * 30;
+    const by = y - 24;
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(-0.11);
+
+    ctx.fillStyle = '#000000';
+    ctx.strokeStyle = comboMultiplier >= 20 ? '#ffe600' : '#e60012';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(-22, -9);
+    ctx.lineTo(26, -12);
+    ctx.lineTo(22, 9);
+    ctx.lineTo(-25, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    drawStretchedMincho(
+      ctx,
+      `×${comboMultiplier.toFixed(1)}`,
+      0,
+      -1,
+      12,
+      comboMultiplier >= 20 ? '#ffe600' : '#ffffff',
+      1.3,
+      'center',
+      2.2,
+      '#000000'
+    );
+    ctx.restore();
+  }
+
+  // 4. Player Craft Silhouette Morphing by Remaining Lives (3 -> 2 -> 1)
+  ctx.save();
+  ctx.translate(x, y);
+
+  if (lives >= 3) {
+    // 3 Lives: Full Seraphim Quad-Wing + 2 Orbiting Phantom Shield Bits
+    for (let b = 0; b < 2; b++) {
+      const bitAngle = survivalTimeMs * 0.008 + b * Math.PI;
+      const ox = Math.cos(bitAngle) * 16;
+      const oy = Math.sin(bitAngle) * 16;
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.rotate(bitAngle + Math.PI / 4);
+      ctx.fillStyle = '#ffe600';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-3, -3, 6, 6);
+      ctx.strokeRect(-3, -3, 6, 6);
+      ctx.restore();
+    }
+
+    // Quad Heavy Wings (Crimson + White Edge)
+    ctx.fillStyle = '#e60012';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -13);
+    ctx.lineTo(13, 5);
+    ctx.lineTo(9, 11);
+    ctx.lineTo(4, 4);
+    ctx.lineTo(0, 8);
+    ctx.lineTo(-4, 4);
+    ctx.lineTo(-9, 11);
+    ctx.lineTo(-13, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (lives === 2) {
+    // 2 Lives: Outer wings shattered — Sleek Dual-Blade Interceptor
+    ctx.fillStyle = '#00e5ff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -11);
+    ctx.lineTo(9, 8);
+    ctx.lineTo(0, 3.5);
+    ctx.lineTo(-9, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    // 1 Life: All wings lost — Naked Unstable Core with Crimson Crackling Sparks
+    const dangerPulse = Math.floor(survivalTimeMs / 60) % 2 === 0;
+    ctx.fillStyle = dangerPulse ? '#ff0033' : '#000000';
+    ctx.strokeStyle = dangerPulse ? '#ffe600' : '#ff0033';
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.moveTo(0, -7.5);
+    ctx.lineTo(6.5, 0);
+    ctx.lineTo(0, 7.5);
+    ctx.lineTo(-6.5, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Crackling lightning arcs around the naked core
+    ctx.strokeStyle = '#ff0033';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 3; i++) {
+      const a = survivalTimeMs * 0.02 + (i * Math.PI * 2) / 3;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
+      ctx.lineTo(Math.cos(a + 0.3) * 12, Math.sin(a + 0.3) * 12);
+      ctx.stroke();
+    }
+  }
+
+  // Exact Hitbox Core (CORE_RADIUS = 3.0)
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, CORE_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
   ctx.restore();
 }
 
@@ -94,62 +332,88 @@ export class CanvasRenderer {
     ctx.setTransform(this.scaleX, 0, 0, this.scaleY, 0, 0);
 
     const isCalibrationPhase = state.phase === 'TITLE' || state.phase === 'RESULT';
+    const isFever = state.comboMultiplier >= 25 && state.comboGauge > 0.3;
 
-    // Base background
-    ctx.fillStyle = isCalibrationPhase ? '#121224' : '#06060b';
+    // Base background (Persona deep crimson-black or Fever high-voltage crimson)
+    ctx.fillStyle = isCalibrationPhase
+      ? '#10070c'
+      : isFever
+        ? '#1c0208'
+        : '#070204';
     ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
-    // 1. Top Tactical HUD (0..HUD_HEIGHT)
-    this.renderHud(ctx, state);
-
-    // 2. Playfield (y: HUD_HEIGHT..LOGICAL_HEIGHT)
+    // Playfield (full height with slanted Persona HUD floating on top)
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
     ctx.clip();
 
     if (state.screenShakeMs > 0) {
-      const intensity = Math.min(7, (state.screenShakeMs / 400) * 6);
+      const intensity = Math.min(9, (state.screenShakeMs / 350) * 7.5);
       const ox = (Math.random() - 0.5) * intensity * 2;
       const oy = (Math.random() - 0.5) * intensity * 2;
       ctx.translate(ox, oy);
     }
 
-    // Tactical grid
-    ctx.strokeStyle = isCalibrationPhase
-      ? 'rgba(255, 153, 0, 0.16)'
-      : 'rgba(255, 153, 0, 0.08)';
-    ctx.lineWidth = 0.75;
-    for (let x = 0; x <= LOGICAL_WIDTH; x += 36) {
-      ctx.beginPath();
-      ctx.moveTo(x, HUD_HEIGHT);
-      ctx.lineTo(x, LOGICAL_HEIGHT);
-      ctx.stroke();
-    }
-    for (let y = HUD_HEIGHT; y <= LOGICAL_HEIGHT; y += 36) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(LOGICAL_WIDTH, y);
-      ctx.stroke();
+    // Persona Halftone Diagonal Polka-Dot Matrix
+    const dotColor = isFever
+      ? 'rgba(255, 230, 0, 0.16)'
+      : 'rgba(230, 0, 18, 0.14)';
+    ctx.fillStyle = dotColor;
+    const timeTick = state.survivalTimeMs * 0.004;
+    for (let gx = 14; gx < LOGICAL_WIDTH; gx += 28) {
+      for (let gy = HUD_HEIGHT + 14; gy < LOGICAL_HEIGHT; gy += 28) {
+        const wave = 1.3 + Math.sin(gx * 0.03 + gy * 0.03 + timeTick) * 1.1;
+        if (wave > 0.4) {
+          ctx.beginPath();
+          ctx.arc(gx, gy, wave, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
-    // Persistent Last-Life Danger Border & Warning Pulse when lives === 1
+    // Adrenaline Speed Lines (concentrating toward the player during active combo / grazing)
+    if (state.phase === 'PLAYING' && (state.comboGauge > 0.4 || state.lives === 1)) {
+      const lineAlpha = state.comboGauge > 0.8 ? 0.32 : 0.15;
+      ctx.strokeStyle =
+        state.lives === 1
+          ? `rgba(255, 0, 50, ${lineAlpha + 0.15})`
+          : `rgba(255, 230, 0, ${lineAlpha})`;
+      ctx.lineWidth = state.comboGauge > 0.8 ? 2.2 : 1.2;
+      const lineCount = state.comboGauge > 0.8 ? 22 : 12;
+      for (let i = 0; i < lineCount; i++) {
+        const ang = (i / lineCount) * Math.PI * 2 + ((state.survivalTimeMs * 0.01) % 0.5);
+        const innerR = 78 + ((i * 19) % 35);
+        ctx.beginPath();
+        ctx.moveTo(
+          state.player.x + Math.cos(ang) * innerR,
+          state.player.y + Math.sin(ang) * innerR
+        );
+        ctx.lineTo(
+          state.player.x + Math.cos(ang) * 420,
+          state.player.y + Math.sin(ang) * 420
+        );
+        ctx.stroke();
+      }
+    }
+
+    // Persistent Last-Life Danger Slashes & Warning Pulse when lives === 1
     if (state.phase === 'PLAYING' && state.lives === 1) {
-      const pulse = 0.5 + 0.5 * Math.sin(state.survivalTimeMs * 0.012);
-      ctx.strokeStyle = `rgba(255, 0, 40, ${0.35 + pulse * 0.5})`;
-      ctx.lineWidth = 5;
-      ctx.strokeRect(2.5, HUD_HEIGHT + 2.5, LOGICAL_WIDTH - 5, LOGICAL_HEIGHT - HUD_HEIGHT - 5);
+      const pulse = 0.5 + 0.5 * Math.sin(state.survivalTimeMs * 0.014);
+      ctx.strokeStyle = `rgba(230, 0, 18, ${0.45 + pulse * 0.5})`;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(3, HUD_HEIGHT + 3, LOGICAL_WIDTH - 6, LOGICAL_HEIGHT - HUD_HEIGHT - 6);
 
       drawStretchedMincho(
         ctx,
-        '警告・残機壱',
+        '警告・残機壱 // FINAL STAND',
         LOGICAL_WIDTH / 2,
         HUD_HEIGHT + 24,
         14,
-        `rgba(255, 40, 60, ${0.55 + pulse * 0.45})`,
-        1.3,
+        `rgba(255, 230, 0, ${0.65 + pulse * 0.35})`,
+        1.32,
         'center',
-        2.5,
+        3.2,
         '#000000'
       );
     }
@@ -159,45 +423,51 @@ export class CanvasRenderer {
       const cx = LOGICAL_WIDTH / 2;
       const cy = HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * 0.6;
       ctx.save();
-      ctx.strokeStyle = 'rgba(0, 255, 238, 0.35)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = 'rgba(255, 230, 0, 0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.moveTo(cx - 48, cy);
-      ctx.lineTo(cx + 48, cy);
-      ctx.moveTo(cx, cy - 48);
-      ctx.lineTo(cx, cy + 48);
+      ctx.moveTo(cx - 52, cy);
+      ctx.lineTo(cx + 52, cy);
+      ctx.moveTo(cx, cy - 52);
+      ctx.lineTo(cx, cy + 52);
       ctx.stroke();
       ctx.restore();
     }
 
-    // Background Evangelion Mincho Cut-In
+    // Persona All-Out Cut-In Slash Banner in Background
     if (state.cutIn) {
-      const alpha = Math.min(1, state.cutIn.remainingMs / 180) * 0.32;
-      drawStretchedMincho(
+      const alpha = Math.min(1, state.cutIn.remainingMs / 160) * 0.52;
+      drawPersonaRansomBanner(
         ctx,
         state.cutIn.topText,
         LOGICAL_WIDTH / 2,
-        HUD_HEIGHT + 145,
-        52,
-        `rgba(255, 153, 0, ${alpha})`,
-        1.45
+        HUD_HEIGHT + 150,
+        28,
+        state.cutIn.color,
+        alpha
       );
       drawStretchedMincho(
         ctx,
         state.cutIn.bottomText,
         LOGICAL_WIDTH / 2,
-        LOGICAL_HEIGHT - 125,
-        34,
-        `rgba(255, 255, 255, ${alpha * 0.85})`,
-        1.38
+        LOGICAL_HEIGHT - 115,
+        32,
+        `rgba(255, 255, 255, ${alpha * 0.9})`,
+        1.38,
+        'center',
+        4,
+        '#000000'
       );
     }
 
-    // Direct Hit Crimson Flash
+    // Direct Hit Crimson/White Impact Flash
     if (state.hitFlashMs > 0) {
-      const flashAlpha = Math.min(0.45, state.hitFlashMs / 360);
-      ctx.fillStyle = `rgba(220, 0, 20, ${flashAlpha})`;
+      const flashAlpha = Math.min(0.55, state.hitFlashMs / 360);
+      ctx.fillStyle =
+        Math.floor(state.hitFlashMs / 40) % 2 === 0
+          ? `rgba(230, 0, 18, ${flashAlpha})`
+          : `rgba(255, 255, 255, ${flashAlpha * 0.7})`;
       ctx.fillRect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
     }
 
@@ -218,31 +488,44 @@ export class CanvasRenderer {
       }
     }
 
-    // Sparks
-    for (const s of state.sparks) {
+    // Comic Star Sparks & Velocity Streaks
+    for (let i = 0; i < state.sparks.length; i++) {
+      const s = state.sparks[i];
       const alpha = Math.max(0, s.remainingMs / s.totalMs);
-      ctx.strokeStyle = s.color;
-      ctx.globalAlpha = alpha;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - s.vx * 0.04, s.y - s.vy * 0.04);
-      ctx.stroke();
+      if (i % 3 === 0) {
+        drawStarSpark(
+          ctx,
+          s.x,
+          s.y,
+          6.5 * alpha + 2,
+          s.color === '#ffcc00' ? '#ffe600' : '#ffffff',
+          s.remainingMs * 0.03 + i,
+          alpha
+        );
+      } else {
+        ctx.strokeStyle = s.color;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x - s.vx * 0.045, s.y - s.vy * 0.045);
+        ctx.stroke();
+      }
     }
     ctx.globalAlpha = 1;
 
-    // Score Popups (with bold black outline for high legibility over bright lasers/bombs)
+    // Score Popups (with bold black outline + Persona tilt)
     for (const p of state.popups) {
       drawStretchedMincho(
         ctx,
         p.text,
         p.x,
         p.y,
-        p.isCritical ? 15 : 12,
-        p.color,
-        1.32,
+        p.isCritical ? 16 : 12.5,
+        p.isCritical ? '#ffe600' : '#00ffee',
+        1.35,
         'center',
-        3.6,
+        4.2,
         '#000000'
       );
     }
@@ -256,94 +539,94 @@ export class CanvasRenderer {
 
     ctx.restore();
 
-    // Playfield frame border
-    ctx.strokeStyle = state.lives === 1 && state.phase === 'PLAYING' ? '#ff0033' : '#ff9900';
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(0.6, HUD_HEIGHT + 0.6, LOGICAL_WIDTH - 1.2, LOGICAL_HEIGHT - HUD_HEIGHT - 1.2);
+    // Top Persona Skewed Polygon HUD
+    this.renderHud(ctx, state);
+
+    // Playfield Jagged Outer Border
+    ctx.strokeStyle = state.lives === 1 && state.phase === 'PLAYING' ? '#ffe600' : '#e60012';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, HUD_HEIGHT + 1, LOGICAL_WIDTH - 2, LOGICAL_HEIGHT - HUD_HEIGHT - 2);
 
     ctx.restore();
   }
 
   private renderHud(ctx: CanvasRenderingContext2D, state: GameState): void {
-    ctx.fillStyle = '#110b07';
+    // Persona-style skewed black & crimson slash header
+    ctx.fillStyle = '#050203';
     ctx.fillRect(0, 0, LOGICAL_WIDTH, HUD_HEIGHT);
-    ctx.strokeStyle = '#ff9900';
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(0.6, 0.6, LOGICAL_WIDTH - 1.2, HUD_HEIGHT - 1.2);
 
-    ctx.fillStyle = '#ff9900';
-    ctx.font = 'bold 10px monospace';
+    // Red diagonal accent shard
+    ctx.fillStyle = '#e60012';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(255, 0);
+    ctx.lineTo(232, HUD_HEIGHT);
+    ctx.lineTo(0, HUD_HEIGHT);
+    ctx.closePath();
+    ctx.fill();
+
+    // Inner black shard
+    ctx.fillStyle = '#080305';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(246, 0);
+    ctx.lineTo(225, HUD_HEIGHT - 4);
+    ctx.lineTo(0, HUD_HEIGHT - 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(0, HUD_HEIGHT - 2);
+    ctx.lineTo(226, HUD_HEIGHT - 2);
+    ctx.lineTo(247, 0);
+    ctx.stroke();
+
+    // Score & Time inside the skewed shard
+    ctx.fillStyle = '#ffe600';
+    ctx.font = '900 10px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('SCORE', 10, 14);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 17px monospace';
-    ctx.fillText(state.score.toLocaleString('en-US').padStart(9, '0'), 10, 33);
-    ctx.fillStyle = '#00ffee';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(`TIME ${formatSurvivalTime(state.survivalTimeMs)}`, 10, 48);
-
-    const boxX = 140;
-    const boxW = 96;
-    ctx.fillStyle = '#070504';
-    ctx.fillRect(boxX, 6, boxW, 44);
-    ctx.strokeStyle = state.comboGauge > 0 ? '#ffcc00' : '#663300';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(boxX, 6, boxW, 44);
+    ctx.fillText(`SCORE // TIME ${formatSurvivalTime(state.survivalTimeMs)}`, 10, 15);
 
     drawStretchedMincho(
       ctx,
-      `×${state.comboMultiplier.toFixed(1)}`,
-      boxX + boxW / 2,
-      23,
-      16,
-      state.comboMultiplier > 1 ? '#ffcc00' : '#777777',
-      1.28
+      state.score.toLocaleString('en-US').padStart(9, '0'),
+      10,
+      36,
+      20,
+      '#ffffff',
+      1.28,
+      'left',
+      3,
+      '#e60012'
     );
-
-    ctx.fillStyle = '#2a1808';
-    ctx.fillRect(boxX + 8, 40, boxW - 16, 5);
-    ctx.fillStyle = '#00ffee';
-    ctx.fillRect(boxX + 8, 40, (boxW - 16) * Math.max(0, Math.min(1, state.comboGauge)), 5);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = state.lives === 1 ? '#ff0033' : '#ff9900';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(state.lives === 1 ? 'DANGER' : 'LIFE', LOGICAL_WIDTH - 10, 14);
-    for (let i = 0; i < INITIAL_LIVES; i++) {
-      const active = i < state.lives;
-      ctx.fillStyle = active ? '#ff2200' : '#2a1111';
-      ctx.strokeStyle = active ? '#ffcc00' : '#442222';
-      const lx = LOGICAL_WIDTH - 10 - (i + 1) * 14;
-      ctx.fillRect(lx, 21, 10, 20);
-      ctx.strokeRect(lx, 21, 10, 20);
-    }
   }
 
   private renderBomb(ctx: CanvasRenderingContext2D, bomb: BombHazard): void {
     if (bomb.elapsedMs < 0) return;
     const info = getBombPhase(bomb);
     if (info.phase === 'CONVERGING') {
-      ctx.fillStyle = 'rgba(255, 60, 0, 0.06)';
-      ctx.strokeStyle = 'rgba(255, 190, 0, 0.85)';
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = 'rgba(230, 0, 18, 0.08)';
+      ctx.strokeStyle = '#ffe600';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.arc(bomb.x, bomb.y, info.currentRingRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     } else if (info.phase === 'HOLD') {
-      const blink = Math.floor(bomb.elapsedMs / 55) % 2 === 0;
-      ctx.fillStyle = blink ? 'rgba(255, 40, 0, 0.24)' : 'rgba(255, 40, 0, 0.12)';
-      ctx.strokeStyle = blink ? '#ffcc00' : '#ff2200';
-      ctx.lineWidth = 2.2;
+      const blink = Math.floor(bomb.elapsedMs / 50) % 2 === 0;
+      ctx.fillStyle = blink ? 'rgba(230, 0, 18, 0.28)' : 'rgba(255, 230, 0, 0.14)';
+      ctx.strokeStyle = blink ? '#ffe600' : '#ffffff';
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.arc(bomb.x, bomb.y, bomb.blastRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     } else if (info.phase === 'ACTIVE') {
-      // Only render the actual blast core (outer thin graze guide ring removed)
-      ctx.fillStyle = 'rgba(255, 80, 0, 0.72)';
+      ctx.fillStyle = 'rgba(230, 0, 18, 0.82)';
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3.0;
       ctx.beginPath();
       ctx.arc(bomb.x, bomb.y, bomb.blastRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -361,23 +644,23 @@ export class CanvasRenderer {
       const imminence = laser.elapsedMs / laser.warningDurationMs;
 
       ctx.save();
-      ctx.strokeStyle = imminence > 0.8 ? '#ffcc00' : '#ff0044';
-      ctx.lineWidth = imminence > 0.8 ? 2.0 : 1.2;
-      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = imminence > 0.8 ? '#ffe600' : '#ff0044';
+      ctx.lineWidth = imminence > 0.8 ? 2.2 : 1.3;
+      ctx.setLineDash([7, 4]);
       ctx.beginPath();
       ctx.moveTo(laser.x1, laser.y1);
       ctx.lineTo(ex, ey);
       ctx.stroke();
       ctx.restore();
     } else if (phase === 'ACTIVE') {
-      ctx.strokeStyle = 'rgba(255, 0, 85, 0.38)';
-      ctx.lineWidth = laser.halfWidth * 3.4;
+      ctx.strokeStyle = 'rgba(230, 0, 18, 0.48)';
+      ctx.lineWidth = laser.halfWidth * 3.6;
       ctx.beginPath();
       ctx.moveTo(laser.x1, laser.y1);
       ctx.lineTo(laser.x2, laser.y2);
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+      ctx.strokeStyle = '#ffe600';
       ctx.lineWidth = laser.halfWidth * 2;
       ctx.beginPath();
       ctx.moveTo(laser.x1, laser.y1);
@@ -385,7 +668,7 @@ export class CanvasRenderer {
       ctx.stroke();
 
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = Math.max(2, laser.halfWidth * 0.7);
+      ctx.lineWidth = Math.max(2.2, laser.halfWidth * 0.75);
       ctx.beginPath();
       ctx.moveTo(laser.x1, laser.y1);
       ctx.lineTo(laser.x2, laser.y2);
@@ -394,12 +677,15 @@ export class CanvasRenderer {
   }
 
   private renderBullet(ctx: CanvasRenderingContext2D, bullet: BulletHazard): void {
-    ctx.fillStyle = '#ff5500';
+    ctx.fillStyle = '#e60012';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(bullet.x, bullet.y, bullet.radius + 1.2, 0, Math.PI * 2);
+    ctx.arc(bullet.x, bullet.y, bullet.radius + 1.4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
 
-    ctx.fillStyle = '#ffffcc';
+    ctx.fillStyle = '#ffe600';
     ctx.beginPath();
     ctx.arc(bullet.x, bullet.y, bullet.radius * 0.55, 0, Math.PI * 2);
     ctx.fill();
@@ -410,20 +696,19 @@ export class CanvasRenderer {
     const progress =
       1 - Math.max(0, Math.min(1, state.gameOverTimerMs / GAME_OVER_EXPLOSION_MS));
 
-    // Expanding shockwave rings
-    const r1 = 8 + progress * 140;
+    const r1 = 8 + progress * 155;
     const alpha1 = Math.max(0, 1 - progress);
-    ctx.strokeStyle = `rgba(255, 200, 0, ${alpha1})`;
-    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = `rgba(255, 230, 0, ${alpha1})`;
+    ctx.lineWidth = 4.0;
     ctx.beginPath();
     ctx.arc(x, y, r1, 0, Math.PI * 2);
     ctx.stroke();
 
-    if (progress > 0.18) {
-      const p2 = (progress - 0.18) / 0.82;
-      const r2 = 6 + p2 * 95;
-      ctx.strokeStyle = `rgba(255, 40, 0, ${Math.max(0, 1 - p2)})`;
-      ctx.lineWidth = 2.5;
+    if (progress > 0.15) {
+      const p2 = (progress - 0.15) / 0.85;
+      const r2 = 6 + p2 * 105;
+      ctx.strokeStyle = `rgba(230, 0, 18, ${Math.max(0, 1 - p2)})`;
+      ctx.lineWidth = 3.0;
       ctx.beginPath();
       ctx.arc(x, y, r2, 0, Math.PI * 2);
       ctx.stroke();
@@ -432,7 +717,7 @@ export class CanvasRenderer {
     if (progress < 0.45) {
       ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress / 0.45})`;
       ctx.beginPath();
-      ctx.arc(x, y, 18 * (1 - progress), 0, Math.PI * 2);
+      ctx.arc(x, y, 22 * (1 - progress), 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -441,8 +726,8 @@ export class CanvasRenderer {
     const { x, y, invulnerableMs, trail } = state.player;
 
     if (trail.length > 1) {
-      ctx.strokeStyle = 'rgba(0, 255, 238, 0.32)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(230, 0, 18, 0.55)';
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.moveTo(trail[0].x, trail[0].y);
       for (let i = 1; i < trail.length; i++) {
@@ -451,29 +736,18 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    if (invulnerableMs > 0 && Math.floor(invulnerableMs / 60) % 2 === 1) {
+    if (invulnerableMs > 0 && Math.floor(invulnerableMs / 55) % 2 === 1) {
       return;
     }
 
-    ctx.strokeStyle = state.comboGauge > 0.8 ? '#00ffee' : 'rgba(0, 255, 220, 0.45)';
-    ctx.lineWidth = state.comboGauge > 0.8 ? 1.8 : 1.0;
-    ctx.beginPath();
-    ctx.arc(x, y, GRAZE_RADIUS, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 10);
-    ctx.lineTo(x + 7, y + 7);
-    ctx.lineTo(x, y + 3.5);
-    ctx.lineTo(x - 7, y + 7);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.fillStyle = '#00ffee';
-    ctx.beginPath();
-    ctx.arc(x, y, CORE_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
+    renderPlayerShipAndRing(
+      ctx,
+      x,
+      y,
+      state.lives,
+      state.comboMultiplier,
+      state.comboGauge,
+      state.survivalTimeMs
+    );
   }
 }

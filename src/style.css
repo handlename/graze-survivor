@@ -12,9 +12,11 @@ body {
   width: 100%;
   height: 100dvh;
   overflow: hidden;
-  background-color: #040408;
+  background-color: #050508;
+  background-image: radial-gradient(rgba(255, 0, 60, 0.14) 1.5px, transparent 1.5px);
+  background-size: 16px 16px;
   color: #ffffff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: "Impact", "Arial Black", "Hiragino Kaku Gothic StdN", ui-sans-serif, sans-serif;
   touch-action: none;
 }
 
@@ -33,9 +35,11 @@ body {
   position: relative;
   height: min(74dvh, calc(96vw * 16 / 9));
   aspect-ratio: 9 / 16;
-  border: 1.5px solid #ff9900;
-  background: #06060b;
-  box-shadow: 0 0 28px rgba(255, 136, 0, 0.22);
+  border: 2.5px solid #ffffff;
+  background: #07070c;
+  box-shadow:
+    6px 6px 0 #ff003c,
+    0 0 32px rgba(255, 0, 60, 0.35);
   overflow: hidden;
 }
 
@@ -55,18 +59,25 @@ body.playing .options-panel {
 
 .pause-hud-btn {
   position: absolute;
-  top: 60px;
+  top: 8px;
   right: 8px;
   z-index: 10;
-  background: rgba(18, 12, 8, 0.88);
-  color: #ff9900;
-  border: 1px solid #ff9900;
-  padding: 5px 9px;
+  background: #08080c;
+  color: #ffee00;
+  border: 2px solid #ffffff;
+  box-shadow: 3px 3px 0 #ff003c;
+  transform: skewX(-14deg);
+  padding: 5px 11px;
   font-family: inherit;
-  font-size: 0.7rem;
-  font-weight: 800;
+  font-size: 0.74rem;
+  font-weight: 900;
   cursor: pointer;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+}
+
+.pause-hud-btn:active {
+  transform: skewX(-14deg) translate(2px, 2px);
+  box-shadow: 1px 1px 0 #ff003c;
 }
 
 .pause-hud-btn.hidden {
@@ -75,13 +86,13 @@ body.playing .options-panel {
 
 .overlay {
   position: absolute;
-  inset: 56px 0 0 0;
+  inset: 52px 0 0 0;
   display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 12px;
-  background: rgba(8, 8, 18, 0.28);
+  background: rgba(6, 6, 12, 0.32);
   pointer-events: none;
 }
 
@@ -91,97 +102,132 @@ body.playing .options-panel {
 
 .overlay-card {
   width: 94%;
-  max-width: 340px;
-  background: rgba(12, 8, 6, 0.86);
-  border: 1.5px solid #ff9900;
-  padding: 14px 12px;
+  max-width: 344px;
+  background: #08080c;
+  border: 3px solid #ffffff;
+  box-shadow:
+    8px 8px 0 #ff003c,
+    -4px -4px 0 #ffee00;
+  transform: rotate(-1.5deg);
+  padding: 16px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   pointer-events: auto;
 }
 
 .eva-title {
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", "MS PMincho", "Noto Serif JP", Georgia, serif;
+  font-family: "Impact", "Arial Black", "Hiragino Kaku Gothic StdN", sans-serif;
   font-weight: 900;
-  font-size: 1.65rem;
-  letter-spacing: -0.04em;
-  transform: scaleY(1.32);
+  font-size: 1.9rem;
+  letter-spacing: 0.02em;
+  transform: skewX(-12deg) rotate(-2deg);
   color: #ffffff;
-  text-shadow: 0 0 10px rgba(255, 102, 0, 0.7);
+  background: #ff003c;
+  padding: 2px 12px;
+  border: 2px solid #ffffff;
+  box-shadow: 4px 4px 0 #000000;
+  text-shadow: 2px 2px 0 #000000;
   margin: 4px 0;
 }
 
 .eva-result-heading {
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", "MS PMincho", "Noto Serif JP", Georgia, serif;
+  font-family: "Impact", "Arial Black", "Hiragino Kaku Gothic StdN", sans-serif;
   font-weight: 900;
-  font-size: 1.2rem;
-  transform: scaleY(1.3);
-  color: #ffcc00;
+  font-size: 1.25rem;
+  transform: skewX(-12deg);
+  color: #08080c;
+  background: #ffee00;
+  padding: 2px 10px;
+  border: 2px solid #ffffff;
+  box-shadow: 4px 4px 0 #ff003c;
 }
 
 .best-line {
-  font-size: 0.85rem;
-  color: #00ffee;
-  font-weight: bold;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88rem;
+  color: #00f0ff;
+  font-weight: 900;
+  background: #101018;
+  padding: 3px 10px;
+  border-left: 4px solid #ff003c;
+  transform: skewX(-10deg);
 }
 
 .primary-btn,
 .secondary-btn {
-  padding: 9px 14px;
+  padding: 9px 16px;
   font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 800;
+  font-size: 0.86rem;
+  font-weight: 900;
   cursor: pointer;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  transform: skewX(-12deg);
+  transition: transform 0.08s ease;
 }
 
 .primary-btn {
-  background: #ff9900;
-  color: #000000;
-  border: 1px solid #ffcc00;
+  background: #ff003c;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 4px 4px 0 #ffee00;
+  text-shadow: 1px 1px 0 #000000;
+}
+
+.primary-btn:active {
+  transform: skewX(-12deg) translate(2px, 2px);
+  box-shadow: 2px 2px 0 #ffee00;
 }
 
 .secondary-btn {
-  background: #120c08;
-  color: #ff9900;
-  border: 1px solid #ff9900;
+  background: #101018;
+  color: #ffee00;
+  border: 2px solid #ffffff;
+  box-shadow: 4px 4px 0 #00f0ff;
+}
+
+.secondary-btn:active {
+  transform: skewX(-12deg) translate(2px, 2px);
+  box-shadow: 2px 2px 0 #00f0ff;
 }
 
 .result-card-preview {
   width: 96%;
   max-width: 340px;
   aspect-ratio: 600 / 400;
-  border: 1px solid #ff9900;
-  background: #090706;
+  border: 2px solid #ffffff;
+  box-shadow: 4px 4px 0 #ff003c;
+  background: #09070c;
 }
 
 .result-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   justify-content: center;
 }
 
 .ranking-box {
   width: 100%;
-  border-top: 1px solid rgba(255, 153, 0, 0.4);
+  border-top: 2px solid #ff003c;
   padding-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .ranking-header {
-  font-size: 0.72rem;
-  color: #ff9900;
-  font-weight: bold;
+  font-size: 0.74rem;
+  color: #ffee00;
+  font-weight: 900;
   margin-bottom: 4px;
+  letter-spacing: 0.05em;
 }
 
 .ranking-list {
   list-style: none;
   max-height: 98px;
   overflow-y: auto;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -190,23 +236,28 @@ body.playing .options-panel {
 .ranking-item {
   display: flex;
   justify-content: space-between;
-  padding: 2px 4px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 3px solid #00f0ff;
 }
 
 .ranking-item.highlight {
-  background: rgba(255, 153, 0, 0.22);
-  color: #ffcc00;
+  background: rgba(255, 0, 60, 0.32);
+  color: #ffee00;
+  border-left-color: #ffee00;
+  font-weight: 900;
 }
 
 .options-panel {
   width: min(96vw, 360px);
-  background: #100b08;
-  border: 1px solid #ff9900;
+  background: #08080c;
+  border: 2px solid #ffffff;
+  box-shadow: 5px 5px 0 #ff003c;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.72rem;
 }
 
@@ -219,21 +270,22 @@ body.playing .options-panel {
 }
 
 .option-label {
-  color: #ff9900;
-  font-weight: bold;
+  color: #ffee00;
+  font-weight: 900;
+  letter-spacing: 0.04em;
 }
 
 .sensor-status {
-  color: #ffcc00;
-  background: rgba(255, 60, 0, 0.18);
-  border: 1px solid #ff6600;
+  color: #ffee00;
+  background: rgba(255, 0, 60, 0.22);
+  border: 1.5px solid #ff003c;
   padding: 4px 6px;
   font-size: 0.68rem;
   line-height: 1.35;
 }
 
 .sensor-status a {
-  color: #00ffee;
+  color: #00f0ff;
   text-decoration: underline;
 }
 
@@ -243,24 +295,26 @@ body.playing .options-panel {
 
 .btn-group {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .toggle-btn {
-  background: #1a120b;
+  background: #141420;
   color: #cccccc;
-  border: 1px solid #664422;
-  padding: 4px 8px;
+  border: 1.5px solid #555568;
+  padding: 4px 9px;
   font-family: inherit;
   font-size: 0.7rem;
-  font-weight: bold;
+  font-weight: 900;
   cursor: pointer;
+  transform: skewX(-10deg);
 }
 
 .toggle-btn.active {
-  background: #ff9900;
-  color: #000000;
-  border-color: #ffcc00;
+  background: #ff003c;
+  color: #ffffff;
+  border-color: #ffffff;
+  box-shadow: 2px 2px 0 #ffee00;
 }
 
 .control-subpanel {
@@ -278,10 +332,11 @@ body.playing .options-panel {
   grid-template-columns: 82px 34px 1fr;
   align-items: center;
   gap: 6px;
-  color: #ffcc00;
+  color: #00f0ff;
+  font-weight: bold;
 }
 
 .slider-row input[type="range"] {
   width: 100%;
-  accent-color: #ff9900;
+  accent-color: #ff003c;
 }
