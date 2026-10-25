@@ -9,7 +9,7 @@ import { computeGyroDelta, computeSwipeDelta, type MotionSample } from './core/i
 import type { ControlOptions, GameState, RankingRecord } from './core/types';
 import { SoundController } from './shell/audio';
 import { requestSensorPermissions, type PermissionTarget } from './shell/permissions';
-import { CanvasRenderer } from './shell/renderer';
+import { CanvasRenderer, setActiveTheme, type VividThemeId } from './shell/renderer';
 import {
   buildShareMessage,
   renderResultCardCanvas,
@@ -27,22 +27,43 @@ import {
 
 handleUrlResetParam();
 
+const THEME_STORAGE_KEY = 'dodge-survivor:theme:v1';
+
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const titleOverlay = document.getElementById('title-overlay') as HTMLElement;
+const rankingOverlay = document.getElementById('ranking-overlay') as HTMLElement;
 const pauseOverlay = document.getElementById('pause-overlay') as HTMLElement;
 const resultOverlay = document.getElementById('result-overlay') as HTMLElement;
+const optionsModal = document.getElementById('options-modal') as HTMLElement;
+
 const titleBest = document.getElementById('title-best') as HTMLElement;
 const resultBanner = document.getElementById('result-banner') as HTMLElement;
 const resultCardPreview = document.getElementById('result-card-preview') as HTMLImageElement;
 const rankingList = document.getElementById('ranking-list') as HTMLOListElement;
+const titleRankingList = document.getElementById('title-ranking-list') as HTMLOListElement;
 const sensorStatus = document.getElementById('sensor-status') as HTMLElement;
 
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnResume = document.getElementById('btn-resume') as HTMLButtonElement;
 const btnQuit = document.getElementById('btn-quit') as HTMLButtonElement;
 const btnStart = document.getElementById('btn-start') as HTMLButtonElement;
+const btnOpenRanking = document.getElementById('btn-open-ranking') as HTMLButtonElement;
+const btnRankingBack = document.getElementById('btn-ranking-back') as HTMLButtonElement;
 const btnShare = document.getElementById('btn-share') as HTMLButtonElement;
 const btnRetry = document.getElementById('btn-retry') as HTMLButtonElement;
+const btnResultTitle = document.getElementById('btn-result-title') as HTMLButtonElement;
+
+const btnOpenOptionsTitle = document.getElementById('btn-open-options-title') as HTMLButtonElement;
+const btnOpenOptionsRanking = document.getElementById(
+  'btn-open-options-ranking'
+) as HTMLButtonElement;
+const btnOpenOptionsPause = document.getElementById('btn-open-options-pause') as HTMLButtonElement;
+const btnOpenOptionsResult = document.getElementById(
+  'btn-open-options-result'
+) as HTMLButtonElement;
+const btnCloseOptions = document.getElementById('btn-close-options') as HTMLButtonElement;
+
+const themeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.theme-btn'));
 
 const btnModeSwipe = document.getElementById('btn-mode-swipe') as HTMLButtonElement;
 const btnModeGyro = document.getElementById('btn-mode-gyro') as HTMLButtonElement;
@@ -67,6 +88,8 @@ const sound = new SoundController();
 let options: ControlOptions = loadControlOptions();
 let state: GameState = createInitialGameState();
 let latestResultCanvas: HTMLCanvasElement | null = null;
+let latestRecord: RankingRecord | null = null;
+let latestIsNewRecord = false;
 let latestShareText = '';
 
 let activePointerId: number | null = null;
@@ -80,6 +103,59 @@ let lastMotionTimestamp: number | null = null;
 let hasReceivedMotionSample = false;
 let lastOrientationBeta: number | null = null;
 let lastOrientationGamma: number | null = null;
+
+function applyVividTheme(themeId: VividThemeId): void {
+  const palette = setActiveTheme(themeId);
+  document.body.setAttribute('data-theme', palette.id);
+  for (const btn of themeButtons) {
+    btn.classList.toggle('active', btn.dataset.themeId === palette.id);
+  }
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, palette.id);
+  } catch {
+    // Ignore storage error
+  }
+  if (state.phase === 'RESULT' && latestRecord) {
+    latestResultCanvas = renderResultCardCanvas(state, latestRecord, latestIsNewRecord);
+    resultCardPreview.src = latestResultCanvas.toDataURL('image/png');
+  }
+}
+
+try {
+  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY) as VividThemeId | null;
+  if (savedTheme) {
+    applyVividTheme(savedTheme);
+  }
+} catch {
+  // Ignore storage error
+}
+
+for (const btn of themeButtons) {
+  btn.addEventListener('click', () => {
+    const id = (btn.dataset.themeId ?? 'phantom') as VividThemeId;
+    applyVividTheme(id);
+  });
+}
+
+function openOptionsModal(): void {
+  optionsModal.classList.remove('hidden');
+}
+
+function closeOptionsModal(): void {
+  optionsModal.classList.add('hidden');
+}
+
+btnOpenOptionsTitle.addEventListener('click', openOptionsModal);
+btnOpenOptionsRanking.addEventListener('click', openOptionsModal);
+btnOpenOptionsPause.addEventListener('click', openOptionsModal);
+btnOpenOptionsResult.addEventListener('click', openOptionsModal);
+btnCloseOptions.addEventListener('click', closeOptionsModal);
+
+optionsModal.addEventListener('click', (e: MouseEvent) => {
+  if (e.target === optionsModal) {
+    closeOptionsModal();
+  }
+});
 
 function setSensorStatusMessage(html: string | null): void {
   if (!html) {
@@ -120,19 +196,49 @@ function updateTitleBest(): void {
   titleBest.textContent = `BEST SCORE: ${best.toLocaleString('en-US')}`;
 }
 
-function renderRankingList(rankings: readonly RankingRecord[], highlightIdx: number): void {
-  rankingList.innerHTML = '';
+function renderRankingListInto(
+  targetList: HTMLOListElement,
+  rankings: readonly RankingRecord[],
+  highlightIdx: number
+): void {
+  targetList.innerHTML = '';
+  if (rankings.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'ranking-empty';
+    empty.textContent = 'NO RECORDS YET // BE THE FIRST PHANTOM!';
+    targetList.appendChild(empty);
+    return;
+  }
+
   rankings.forEach((rec, idx) => {
     const li = document.createElement('li');
     li.className = `ranking-item${idx === highlightIdx ? ' highlight' : ''}`;
-    const left = document.createElement('span');
-    left.textContent = `#${idx + 1} ${rec.score.toLocaleString('en-US')}`;
-    const mid = document.createElement('span');
-    mid.textContent = formatSurvivalTime(rec.survivalTimeMs);
-    const right = document.createElement('span');
-    right.textContent = rec.timestamp.slice(5, 16);
-    li.append(left, mid, right);
-    rankingList.appendChild(li);
+
+    const topRow = document.createElement('div');
+    topRow.className = 'ranking-row-top';
+
+    const badge = document.createElement('span');
+    badge.className = 'ranking-rank-badge';
+    badge.textContent = idx === highlightIdx ? `#${idx + 1} NEW` : `#${idx + 1}`;
+
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'ranking-score-val';
+    scoreSpan.textContent = `${rec.score.toLocaleString('en-US')} PTS`;
+
+    topRow.append(badge, scoreSpan);
+
+    const bottomRow = document.createElement('div');
+    bottomRow.className = 'ranking-row-bottom';
+
+    const timeSpan = document.createElement('span');
+    timeSpan.textContent = `TIME ${formatSurvivalTime(rec.survivalTimeMs)} (×${rec.maxCombo.toFixed(1)})`;
+
+    const dateSpan = document.createElement('span');
+    dateSpan.textContent = rec.timestamp.slice(0, 16);
+
+    bottomRow.append(timeSpan, dateSpan);
+    li.append(topRow, bottomRow);
+    targetList.appendChild(li);
   });
 }
 
@@ -148,7 +254,6 @@ btnModeSwipe.addEventListener('click', () => {
 });
 
 async function enableGyroWithFeedback(): Promise<boolean> {
-  // Mobile browsers block DeviceMotionEvent and requestPermission over plain http:// LAN IPs
   if (
     typeof window !== 'undefined' &&
     !window.isSecureContext &&
@@ -215,13 +320,40 @@ btnSound.addEventListener('click', () => {
   updateOptions({ soundEnabled: !options.soundEnabled });
 });
 
+function showTitleScreen(): void {
+  sound.stopBgm();
+  state = createInitialGameState();
+  closeOptionsModal();
+  btnPause.classList.add('hidden');
+  pauseOverlay.classList.remove('active');
+  resultOverlay.classList.remove('active');
+  rankingOverlay.classList.remove('active');
+  titleOverlay.classList.add('active');
+  updateTitleBest();
+  window.setTimeout(() => renderer.resize(), 0);
+}
+
+function showRankingScreen(): void {
+  closeOptionsModal();
+  const rankings = loadRanking();
+  renderRankingListInto(titleRankingList, rankings, -1);
+  titleOverlay.classList.remove('active');
+  rankingOverlay.classList.add('active');
+}
+
+btnOpenRanking.addEventListener('click', showRankingScreen);
+btnRankingBack.addEventListener('click', showTitleScreen);
+btnQuit.addEventListener('click', showTitleScreen);
+btnResultTitle.addEventListener('click', showTitleScreen);
+
 function syncPauseUI(): void {
-  const isPlaying = state.phase === 'PLAYING' || state.phase === 'GAME_OVER';
   const isPaused = state.phase === 'PAUSED';
-  document.body.classList.toggle('playing', isPlaying);
   btnPause.classList.toggle('hidden', state.phase !== 'PLAYING' && state.phase !== 'PAUSED');
   btnPause.textContent = isPaused ? 'RESUME' : 'PAUSE';
   pauseOverlay.classList.toggle('active', isPaused);
+  if (!isPaused) {
+    closeOptionsModal();
+  }
   if (isPaused) {
     sound.stopBgm();
   } else if (state.phase === 'PLAYING') {
@@ -250,20 +382,14 @@ btnResume.addEventListener('click', () => {
   }
 });
 
-btnQuit.addEventListener('click', () => {
-  sound.stopBgm();
-  state = createInitialGameState();
-  document.body.classList.remove('playing');
-  btnPause.classList.add('hidden');
-  pauseOverlay.classList.remove('active');
-  resultOverlay.classList.remove('active');
-  titleOverlay.classList.add('active');
-  updateTitleBest();
-  window.setTimeout(() => renderer.resize(), 0);
-});
-
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+  if (e.key === 'Escape') {
+    if (!optionsModal.classList.contains('hidden')) {
+      closeOptionsModal();
+      return;
+    }
+    handleTogglePause();
+  } else if (e.key === 'p' || e.key === 'P') {
     handleTogglePause();
   }
 });
@@ -272,12 +398,13 @@ async function handleStartGame(): Promise<void> {
   if (options.mode === 'GYRO') {
     await enableGyroWithFeedback();
   }
+  closeOptionsModal();
   state = startNewGame(state);
-  document.body.classList.add('playing');
   btnPause.classList.remove('hidden');
   btnPause.textContent = 'PAUSE';
   btnShare.textContent = 'SHARE RESULT';
   titleOverlay.classList.remove('active');
+  rankingOverlay.classList.remove('active');
   pauseOverlay.classList.remove('active');
   resultOverlay.classList.remove('active');
   sound.startBgm();
@@ -304,7 +431,7 @@ btnShare.addEventListener('click', async () => {
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return Boolean(target.closest('button, input, label, a, .options-panel'));
+  return Boolean(target.closest('button, input, label, a, .options-panel, .modal-backdrop'));
 }
 
 window.addEventListener('pointerdown', (e: PointerEvent) => {
@@ -361,7 +488,6 @@ window.addEventListener('devicemotion', (e: DeviceMotionEvent) => {
   }
 });
 
-// Fallback for devices firing DeviceOrientationEvent Euler angles without rotationRate
 window.addEventListener('deviceorientation', (e: DeviceOrientationEvent) => {
   if (options.mode !== 'GYRO' || hasReceivedMotionSample) return;
   if (e.beta === null || e.gamma === null) return;
@@ -426,7 +552,6 @@ function onFrame(now: number): void {
 
   if (prevPhase !== 'RESULT' && state.phase === 'RESULT') {
     sound.stopBgm();
-    document.body.classList.remove('playing');
     btnPause.classList.add('hidden');
     pauseOverlay.classList.remove('active');
     const record: RankingRecord = {
@@ -437,19 +562,21 @@ function onFrame(now: number): void {
       timestamp: formatTimestamp(new Date()),
     };
     const saved = saveRankingRecord(record);
+    latestRecord = record;
+    latestIsNewRecord = saved.isNewRecord;
     resultBanner.textContent = saved.isNewRecord
-      ? '最高記録更新・極限達成'
-      : '作戦終了・戦果報告';
+      ? 'NEW RECORD // SHOWTIME!!'
+      : 'ALL-OUT REPORT // RESULT';
     latestResultCanvas = renderResultCardCanvas(state, record, saved.isNewRecord);
     resultCardPreview.src = latestResultCanvas.toDataURL('image/png');
     latestShareText = buildShareMessage(record, saved.isNewRecord);
-    renderRankingList(saved.rankings, saved.rankIndex);
+    renderRankingListInto(rankingList, saved.rankings, saved.rankIndex);
     updateTitleBest();
     resultOverlay.classList.add('active');
     window.setTimeout(() => renderer.resize(), 0);
   }
 
-  renderer.render(state);
+  renderer.render(state, now);
   requestAnimationFrame(onFrame);
 }
 

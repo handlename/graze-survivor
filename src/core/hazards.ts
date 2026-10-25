@@ -137,7 +137,7 @@ function createLaserThroughPoint(
     y2: focusY + dy,
     halfWidth,
     elapsedMs: -staggerMs,
-    warningDurationMs: 750,
+    warningDurationMs: 950,
     activeDurationMs: 650,
     grazeTimerMs: 0,
   };
@@ -345,8 +345,8 @@ export function spawnBombCluster(
       y: by,
       blastRadius,
       elapsedMs: -staggerMs,
-      convergeDurationMs: 350,
-      holdDurationMs: 550,
+      convergeDurationMs: 420,
+      holdDurationMs: 680,
       activeDurationMs: 450,
       grazeTimerMs: 0,
     });

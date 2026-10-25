@@ -91,9 +91,9 @@ export function startNewGame(prev: GameState): GameState {
       trail: [startPos],
     },
     cutIn: {
-      topText: '作戦開始',
-      bottomText: '極限接近せよ',
-      color: '#ff9900',
+      topText: 'SHOWTIME!!',
+      bottomText: 'GRAZE THE EDGE',
+      color: '#ff0044',
       remainingMs: 900,
       totalMs: 900,
     },
@@ -363,9 +363,9 @@ export function stepGame(
         screenShakeMs = 900;
         hitFlashMs = 700;
         cutIn = {
-          topText: '全機喪失・撃墜',
+          topText: 'ALL OUT // WIPED',
           bottomText: 'SIGNAL LOST',
-          color: '#ff2200',
+          color: '#ff0044',
           remainingMs: GAME_OVER_EXPLOSION_MS,
           totalMs: GAME_OVER_EXPLOSION_MS,
         };
@@ -378,7 +378,7 @@ export function stepGame(
             y: clampedPos.y,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
-            color: i % 3 === 0 ? '#ffffff' : i % 2 === 0 ? '#ffcc00' : '#ff3300',
+            color: i % 3 === 0 ? '#ffffff' : i % 2 === 0 ? '#fff000' : '#ff0044',
             remainingMs: 1100,
             totalMs: 1100,
           });
@@ -386,17 +386,17 @@ export function stepGame(
       } else if (lives === 1) {
         lastLifeWarning = true;
         cutIn = {
-          topText: '最終防衛線・残機壱',
+          topText: 'FINAL STAND',
           bottomText: 'WARNING: LAST LIFE',
-          color: '#ff0033',
+          color: '#ff0044',
           remainingMs: 1500,
           totalMs: 1500,
         };
       } else {
         cutIn = {
-          topText: '直撃・被弾',
-          bottomText: 'コンボ消滅',
-          color: '#ff2200',
+          topText: 'DIRECT HIT!',
+          bottomText: 'COMBO BROKEN',
+          color: '#ff0044',
           remainingMs: 950,
           totalMs: 950,
         };
@@ -442,8 +442,8 @@ export function stepGame(
               fx.popups.push({
                 x: clampedPos.x + (rng() - 0.5) * 32,
                 y: clampedPos.y - 16 - rng() * 12,
-                text: reward.isCritical ? `極限 +${reward.scoreDelta}!!` : `+${reward.scoreDelta}`,
-                color: reward.isCritical ? '#ffcc00' : '#00ffee',
+                text: reward.isCritical ? `MAX +${reward.scoreDelta}!!` : `+${reward.scoreDelta}`,
+                color: reward.isCritical ? '#fff000' : '#00f5ff',
                 isCritical: reward.isCritical,
                 remainingMs: 520,
               });
@@ -462,9 +462,9 @@ export function stepGame(
         if (criticalGrazeCount > 0 || activeGrazeSources >= 2) {
           screenShakeMs = Math.max(screenShakeMs, 90);
           cutIn = {
-            topText: activeGrazeSources >= 2 ? '多重交差・極限' : '極限接近',
+            topText: activeGrazeSources >= 2 ? 'CROSS OVERDRIVE' : 'PHANTOM GRAZE',
             bottomText: `COMBO ×${comboMultiplier.toFixed(1)}`,
-            color: '#ffcc00',
+            color: '#fff000',
             remainingMs: 420,
             totalMs: 420,
           };

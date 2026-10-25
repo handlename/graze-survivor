@@ -12,8 +12,9 @@ import {
 } from '../core/types';
 import {
   drawPersonaRansomBanner,
+  drawPersonaText,
   drawStarSpark,
-  drawStretchedMincho,
+  getActiveTheme,
   renderPlayerShipAndRing,
 } from './renderer';
 import { formatSurvivalTime } from './storage';
@@ -29,12 +30,13 @@ function renderPeakSnapshotCrop(
   snapshot: PeakMomentSnapshot | null,
   fallbackState: GameState
 ): void {
+  const theme = getActiveTheme();
   ctx.save();
   ctx.beginPath();
   ctx.rect(boxX, boxY, boxW, boxH);
   ctx.clip();
 
-  ctx.fillStyle = '#090204';
+  ctx.fillStyle = theme.bgBase;
   ctx.fillRect(boxX, boxY, boxW, boxH);
 
   const player = snapshot ? snapshot.player : fallbackState.player;
@@ -61,7 +63,7 @@ function renderPeakSnapshotCrop(
   ctx.translate(-camX, -camY);
 
   // Halftone background dots
-  ctx.fillStyle = 'rgba(230, 0, 18, 0.2)';
+  ctx.fillStyle = theme.dotRgba;
   for (let gx = 14; gx < LOGICAL_WIDTH; gx += 24) {
     for (let gy = HUD_HEIGHT + 14; gy < LOGICAL_HEIGHT; gy += 24) {
       ctx.beginPath();
@@ -76,29 +78,31 @@ function renderPeakSnapshotCrop(
       if (b.elapsedMs < 0) continue;
       const info = getBombPhase(b);
       if (info.phase === 'CONVERGING') {
-        ctx.fillStyle = 'rgba(230, 0, 18, 0.08)';
-        ctx.strokeStyle = '#ffe600';
+        ctx.fillStyle = 'rgba(255, 0, 68, 0.08)';
+        ctx.strokeStyle = theme.highlight;
         ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.arc(b.x, b.y, info.currentRingRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       } else if (info.phase === 'HOLD') {
-        ctx.fillStyle = 'rgba(230, 0, 18, 0.24)';
-        ctx.strokeStyle = '#ffe600';
+        ctx.fillStyle = 'rgba(255, 0, 68, 0.24)';
+        ctx.strokeStyle = theme.highlight;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       } else if (info.phase === 'ACTIVE') {
-        ctx.fillStyle = 'rgba(230, 0, 18, 0.78)';
+        ctx.fillStyle = theme.primary;
+        ctx.globalAlpha = 0.8;
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
     }
   }
@@ -110,7 +114,7 @@ function renderPeakSnapshotCrop(
       const phase = getLaserPhase(l);
       if (phase === 'WARNING') {
         ctx.save();
-        ctx.strokeStyle = '#ff0044';
+        ctx.strokeStyle = theme.primary;
         ctx.lineWidth = 1.4;
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
@@ -119,14 +123,16 @@ function renderPeakSnapshotCrop(
         ctx.stroke();
         ctx.restore();
       } else if (phase === 'ACTIVE') {
-        ctx.strokeStyle = 'rgba(230, 0, 18, 0.45)';
+        ctx.strokeStyle = theme.primary;
+        ctx.globalAlpha = 0.5;
         ctx.lineWidth = l.halfWidth * 3.2;
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
         ctx.lineTo(l.x2, l.y2);
         ctx.stroke();
+        ctx.globalAlpha = 1;
 
-        ctx.strokeStyle = '#ffe600';
+        ctx.strokeStyle = theme.highlight;
         ctx.lineWidth = l.halfWidth * 2;
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
@@ -146,11 +152,11 @@ function renderPeakSnapshotCrop(
   for (const h of hazards) {
     if (h.kind === 'BULLET') {
       const b = h as BulletHazard;
-      ctx.fillStyle = '#e60012';
+      ctx.fillStyle = theme.primary;
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.radius + 1.2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#ffe600';
+      ctx.fillStyle = theme.highlight;
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.radius * 0.55, 0, Math.PI * 2);
       ctx.fill();
@@ -160,7 +166,7 @@ function renderPeakSnapshotCrop(
   for (let i = 0; i < sparks.length; i++) {
     const s = sparks[i];
     if (i % 2 === 0) {
-      drawStarSpark(ctx, s.x, s.y, 5, '#ffe600', i * 0.6, 0.9);
+      drawStarSpark(ctx, s.x, s.y, 5, theme.highlight, i * 0.6, 0.9);
     } else {
       ctx.strokeStyle = s.color;
       ctx.lineWidth = 1.6;
@@ -171,14 +177,14 @@ function renderPeakSnapshotCrop(
     }
   }
   for (const p of popups) {
-    drawStretchedMincho(
+    drawPersonaText(
       ctx,
       p.text,
       p.x,
       p.y,
       p.isCritical ? 12 : 10,
-      p.isCritical ? '#ffe600' : '#00ffee',
-      1.3,
+      p.isCritical ? theme.highlight : theme.secondary,
+      -0.18,
       'center',
       3.2,
       '#000000'
@@ -189,13 +195,13 @@ function renderPeakSnapshotCrop(
 
   ctx.restore();
 
-  ctx.fillStyle = 'rgba(5, 2, 3, 0.9)';
+  ctx.fillStyle = 'rgba(6, 0, 14, 0.92)';
   ctx.fillRect(boxX, boxY + boxH - 36, boxW, 36);
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 2;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-  ctx.fillStyle = '#ffe600';
+  ctx.fillStyle = theme.highlight;
   ctx.font = '900 11px monospace';
   ctx.textAlign = 'left';
   const peakRate = snapshot ? snapshot.windowScoreRatePerSec : 0;
@@ -211,17 +217,18 @@ export function renderResultCardCanvas(
   record: RankingRecord,
   isNewRecord: boolean
 ): HTMLCanvasElement {
+  const theme = getActiveTheme();
   const canvas = document.createElement('canvas');
   canvas.width = 600;
   canvas.height = 400;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  // Persona Crimson & Pitch-Black Diagonal Split Backdrop
-  ctx.fillStyle = '#070204';
+  // Vivid Persona Diagonal Split Backdrop
+  ctx.fillStyle = theme.bgBase;
   ctx.fillRect(0, 0, 600, 400);
 
-  ctx.fillStyle = '#e60012';
+  ctx.fillStyle = theme.primary;
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(390, 0);
@@ -230,7 +237,7 @@ export function renderResultCardCanvas(
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = '#080204';
+  ctx.fillStyle = '#090014';
   ctx.beginPath();
   ctx.moveTo(10, 12);
   ctx.lineTo(372, 12);
@@ -241,43 +248,43 @@ export function renderResultCardCanvas(
 
   drawPersonaRansomBanner(
     ctx,
-    isNewRecord ? '最高記録更新' : '作戦終了報告',
+    isNewRecord ? 'NEW RECORD!!' : 'SHOWTIME REPORT',
     190,
     52,
-    24,
-    '#e60012',
+    22,
+    theme.primary,
     1
   );
 
-  ctx.fillStyle = '#ffe600';
+  ctx.fillStyle = theme.highlight;
   ctx.font = '900 13px monospace';
   ctx.textAlign = 'left';
   ctx.fillText('FINAL SCORE', 28, 106);
 
-  drawStretchedMincho(
+  drawPersonaText(
     ctx,
     record.score.toLocaleString('en-US'),
     28,
     148,
     40,
     '#ffffff',
-    1.3,
+    -0.16,
     'left',
     4,
-    '#e60012'
+    theme.primary
   );
 
-  ctx.fillStyle = '#ffe600';
+  ctx.fillStyle = theme.highlight;
   ctx.font = '900 12px monospace';
   ctx.fillText('SURVIVAL TIME', 28, 206);
   ctx.fillStyle = '#ffffff';
   ctx.font = '900 22px monospace';
   ctx.fillText(formatSurvivalTime(record.survivalTimeMs), 28, 232);
 
-  ctx.fillStyle = '#ffe600';
+  ctx.fillStyle = theme.highlight;
   ctx.font = '900 12px monospace';
   ctx.fillText('MAX COMBO', 205, 206);
-  ctx.fillStyle = '#ffe600';
+  ctx.fillStyle = theme.secondary;
   ctx.font = '900 22px monospace';
   ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 205, 232);
 
@@ -285,18 +292,18 @@ export function renderResultCardCanvas(
   ctx.font = 'bold 12px monospace';
   ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 274);
 
-  ctx.fillStyle = '#aaaaaa';
+  ctx.fillStyle = '#cccccc';
   ctx.font = '12px monospace';
   ctx.fillText(`TIMESTAMP: ${record.timestamp}`, 28, 304);
 
-  drawStretchedMincho(
+  drawPersonaText(
     ctx,
     'DODGE SURVIVOR',
     28,
     350,
-    20,
-    '#ffe600',
-    1.3,
+    22,
+    theme.highlight,
+    -0.18,
     'left',
     3,
     '#000000'
@@ -307,7 +314,7 @@ export function renderResultCardCanvas(
   const mapW = 190;
   const mapH = 316;
 
-  ctx.fillStyle = '#ffe600';
+  ctx.fillStyle = theme.highlight;
   ctx.font = '900 11px monospace';
   ctx.textAlign = 'center';
   ctx.fillText('PEAK GRAZE MOMENT', mapX + mapW / 2, mapY - 10);
@@ -320,7 +327,7 @@ export function renderResultCardCanvas(
 export function buildShareMessage(record: RankingRecord, isNewRecord: boolean): string {
   const headline = isNewRecord
     ? 'MAXIMUM GRAZE! NEW HIGH SCORE! ⚡🔥'
-    : 'OPERATION COMPLETE! ⚡🔥';
+    : 'SHOWTIME COMPLETE! ⚡🔥';
   return [
     headline,
     `SCORE: ${record.score.toLocaleString('en-US')} (MAX COMBO ×${record.maxCombo.toFixed(1)})`,

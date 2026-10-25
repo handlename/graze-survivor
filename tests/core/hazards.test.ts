@@ -83,6 +83,8 @@ describe('hazards lifecycle and continuous spawners', () => {
     const bombs = spawnBombCluster(threat, { x: 180, y: 340 }, 'b', rng);
     expect(lasers.length).toBeGreaterThanOrEqual(2);
     expect(bombs.length).toBeGreaterThanOrEqual(1);
+    expect(lasers[0].warningDurationMs).toBeGreaterThanOrEqual(900);
+    expect(bombs[0].convergeDurationMs + bombs[0].holdDurationMs).toBeGreaterThanOrEqual(1050);
 
     const stepped = stepHazards([...lasers, ...bombs], 4000);
     expect(stepped.length).toBe(0);

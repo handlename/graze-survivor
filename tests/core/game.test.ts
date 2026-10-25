@@ -115,7 +115,7 @@ describe('core game engine loop', () => {
     expect(events.directHit).toBe(true);
     expect(events.lastLifeWarning).toBe(true);
     expect(at1Life.lives).toBe(1);
-    expect(at1Life.cutIn?.topText).toContain('残機壱');
+    expect(at1Life.cutIn?.topText).toContain('FINAL STAND');
   });
 
   it('enters GAME_OVER explosion phase at 0 lives before transitioning to RESULT after explosion timer completes', () => {
