@@ -35,6 +35,7 @@ const titleBest = document.getElementById('title-best') as HTMLElement;
 const resultBanner = document.getElementById('result-banner') as HTMLElement;
 const resultCardPreview = document.getElementById('result-card-preview') as HTMLImageElement;
 const rankingList = document.getElementById('ranking-list') as HTMLOListElement;
+const sensorStatus = document.getElementById('sensor-status') as HTMLElement;
 
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
 const btnResume = document.getElementById('btn-resume') as HTMLButtonElement;
@@ -76,6 +77,19 @@ let pendingRawDy = 0;
 let pendingGyroDx = 0;
 let pendingGyroDy = 0;
 let lastMotionTimestamp: number | null = null;
+let hasReceivedMotionSample = false;
+let lastOrientationBeta: number | null = null;
+let lastOrientationGamma: number | null = null;
+
+function setSensorStatusMessage(html: string | null): void {
+  if (!html) {
+    sensorStatus.innerHTML = '';
+    sensorStatus.classList.add('hidden');
+  } else {
+    sensorStatus.innerHTML = html;
+    sensorStatus.classList.remove('hidden');
+  }
+}
 
 function syncOptionsUI(): void {
   btnModeSwipe.classList.toggle('active', options.mode === 'SWIPE');
@@ -129,10 +143,27 @@ function updateOptions(patch: Partial<ControlOptions>): void {
 }
 
 btnModeSwipe.addEventListener('click', () => {
+  setSensorStatusMessage(null);
   updateOptions({ mode: 'SWIPE' });
 });
 
-btnModeGyro.addEventListener('click', async () => {
+async function enableGyroWithFeedback(): Promise<boolean> {
+  // Mobile browsers block DeviceMotionEvent and requestPermission over plain http:// LAN IPs
+  if (
+    typeof window !== 'undefined' &&
+    !window.isSecureContext &&
+    window.location.protocol === 'http:' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
+    const httpsUrl = `https://${window.location.hostname}:5174${window.location.pathname}${window.location.search}`;
+    setSensorStatusMessage(
+      `GYRO REQUIRES HTTPS ON MOBILE: <a href="${httpsUrl}">OPEN ${httpsUrl}</a>`
+    );
+    updateOptions({ mode: 'GYRO' });
+    return false;
+  }
+
   const granted = await requestSensorPermissions(
     typeof DeviceMotionEvent !== 'undefined'
       ? (DeviceMotionEvent as unknown as PermissionTarget)
@@ -141,9 +172,19 @@ btnModeGyro.addEventListener('click', async () => {
       ? (DeviceOrientationEvent as unknown as PermissionTarget)
       : undefined
   );
-  if (granted) {
-    updateOptions({ mode: 'GYRO' });
+
+  if (!granted) {
+    setSensorStatusMessage('MOTION SENSOR PERMISSION DENIED BY BROWSER.');
+    return false;
   }
+
+  setSensorStatusMessage(null);
+  updateOptions({ mode: 'GYRO' });
+  return true;
+}
+
+btnModeGyro.addEventListener('click', () => {
+  void enableGyroWithFeedback();
 });
 
 sliderSpeed.addEventListener('input', () => {
@@ -175,15 +216,15 @@ btnSound.addEventListener('click', () => {
 });
 
 function syncPauseUI(): void {
-  const isPlaying = state.phase === 'PLAYING';
+  const isPlaying = state.phase === 'PLAYING' || state.phase === 'GAME_OVER';
   const isPaused = state.phase === 'PAUSED';
   document.body.classList.toggle('playing', isPlaying);
-  btnPause.classList.toggle('hidden', !isPlaying && !isPaused);
+  btnPause.classList.toggle('hidden', state.phase !== 'PLAYING' && state.phase !== 'PAUSED');
   btnPause.textContent = isPaused ? 'RESUME' : 'PAUSE';
   pauseOverlay.classList.toggle('active', isPaused);
   if (isPaused) {
     sound.stopBgm();
-  } else if (isPlaying) {
+  } else if (state.phase === 'PLAYING') {
     sound.startBgm();
   }
   window.setTimeout(() => renderer.resize(), 0);
@@ -229,19 +270,13 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
 
 async function handleStartGame(): Promise<void> {
   if (options.mode === 'GYRO') {
-    await requestSensorPermissions(
-      typeof DeviceMotionEvent !== 'undefined'
-        ? (DeviceMotionEvent as unknown as PermissionTarget)
-        : undefined,
-      typeof DeviceOrientationEvent !== 'undefined'
-        ? (DeviceOrientationEvent as unknown as PermissionTarget)
-        : undefined
-    );
+    await enableGyroWithFeedback();
   }
   state = startNewGame(state);
   document.body.classList.add('playing');
   btnPause.classList.remove('hidden');
   btnPause.textContent = 'PAUSE';
+  btnShare.textContent = 'SHARE RESULT';
   titleOverlay.classList.remove('active');
   pauseOverlay.classList.remove('active');
   resultOverlay.classList.remove('active');
@@ -257,10 +292,14 @@ btnRetry.addEventListener('click', () => {
   void handleStartGame();
 });
 
-btnShare.addEventListener('click', () => {
-  if (latestResultCanvas) {
-    void shareResultImage(latestResultCanvas, latestShareText);
-  }
+btnShare.addEventListener('click', async () => {
+  if (!latestResultCanvas) return;
+  btnShare.textContent = 'SHARING...';
+  const status = await shareResultImage(latestResultCanvas, latestShareText);
+  btnShare.textContent = status === 'shared' ? 'SHARED!' : 'IMAGE SAVED!';
+  window.setTimeout(() => {
+    btnShare.textContent = 'SHARE RESULT';
+  }, 2200);
 });
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -302,18 +341,38 @@ window.addEventListener('devicemotion', (e: DeviceMotionEvent) => {
   const dtSec = lastMotionTimestamp !== null ? (now - lastMotionTimestamp) / 1000 : 0.016;
   lastMotionTimestamp = now;
 
-  const sample: MotionSample = {
-    alphaRate: e.rotationRate?.alpha ?? null,
-    betaRate: e.rotationRate?.beta ?? null,
-    gammaRate: e.rotationRate?.gamma ?? null,
-    gx: e.accelerationIncludingGravity?.x ?? null,
-    gy: e.accelerationIncludingGravity?.y ?? null,
-    gz: e.accelerationIncludingGravity?.z ?? null,
-    dtSec,
-  };
-  const delta = computeGyroDelta(sample, options);
-  pendingGyroDx += delta.dx;
-  pendingGyroDy += delta.dy;
+  if (
+    e.rotationRate &&
+    (e.rotationRate.alpha !== null || e.rotationRate.beta !== null || e.rotationRate.gamma !== null)
+  ) {
+    hasReceivedMotionSample = true;
+    const sample: MotionSample = {
+      alphaRate: e.rotationRate.alpha,
+      betaRate: e.rotationRate.beta,
+      gammaRate: e.rotationRate.gamma,
+      gx: e.accelerationIncludingGravity?.x ?? null,
+      gy: e.accelerationIncludingGravity?.y ?? null,
+      gz: e.accelerationIncludingGravity?.z ?? null,
+      dtSec,
+    };
+    const delta = computeGyroDelta(sample, options);
+    pendingGyroDx += delta.dx;
+    pendingGyroDy += delta.dy;
+  }
+});
+
+// Fallback for devices firing DeviceOrientationEvent Euler angles without rotationRate
+window.addEventListener('deviceorientation', (e: DeviceOrientationEvent) => {
+  if (options.mode !== 'GYRO' || hasReceivedMotionSample) return;
+  if (e.beta === null || e.gamma === null) return;
+  if (lastOrientationBeta !== null && lastOrientationGamma !== null) {
+    const dGamma = Math.max(-15, Math.min(15, e.gamma - lastOrientationGamma));
+    const dBeta = Math.max(-15, Math.min(15, e.beta - lastOrientationBeta));
+    pendingGyroDx += dGamma * options.gyroSensitivity * (options.invertX ? -1 : 1);
+    pendingGyroDy += dBeta * options.gyroSensitivity * (options.invertY ? -1 : 1);
+  }
+  lastOrientationBeta = e.beta;
+  lastOrientationGamma = e.gamma;
 });
 
 window.addEventListener('resize', () => {
@@ -355,11 +414,17 @@ function onFrame(now: number): void {
   if (events.bombDetonatedCount > 0) {
     sound.playBombDetonate();
   }
-  if (events.directHit) {
+  if (events.playerExploded) {
+    sound.stopBgm();
+    btnPause.classList.add('hidden');
+    sound.playPlayerExplosion();
+  } else if (events.lastLifeWarning) {
+    sound.playLastLifeSirens();
+  } else if (events.directHit) {
     sound.playDirectHit();
   }
 
-  if (prevPhase === 'PLAYING' && state.phase === 'RESULT') {
+  if (prevPhase !== 'RESULT' && state.phase === 'RESULT') {
     sound.stopBgm();
     document.body.classList.remove('playing');
     btnPause.classList.add('hidden');

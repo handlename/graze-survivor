@@ -39,7 +39,6 @@ function renderPeakSnapshotCrop(
   const sparks = snapshot ? snapshot.sparks : fallbackState.sparks;
   const popups = snapshot ? snapshot.popups : fallbackState.popups;
 
-  // Crop a 180 x 260 logical window centered around the player at the peak moment
   const cropW = 180;
   const cropH = 260;
   const minCenterX = cropW / 2;
@@ -57,7 +56,6 @@ function renderPeakSnapshotCrop(
   ctx.scale(scaleX, scaleY);
   ctx.translate(-camX, -camY);
 
-  // Tactical grid inside snapshot
   ctx.strokeStyle = 'rgba(255, 153, 0, 0.14)';
   ctx.lineWidth = 0.75;
   for (let x = 0; x <= LOGICAL_WIDTH; x += 36) {
@@ -73,7 +71,6 @@ function renderPeakSnapshotCrop(
     ctx.stroke();
   }
 
-  // Watermark cut-in in background of crop
   drawStretchedMincho(
     ctx,
     '極限瞬間',
@@ -84,7 +81,6 @@ function renderPeakSnapshotCrop(
     1.42
   );
 
-  // Bombs
   for (const h of hazards) {
     if (h.kind === 'BOMB') {
       const b = h as BombHazard;
@@ -118,10 +114,10 @@ function renderPeakSnapshotCrop(
     }
   }
 
-  // Lasers
   for (const h of hazards) {
     if (h.kind === 'LASER') {
       const l = h as LaserHazard;
+      if (l.elapsedMs < 0) continue;
       const phase = getLaserPhase(l);
       if (phase === 'WARNING') {
         ctx.save();
@@ -158,7 +154,6 @@ function renderPeakSnapshotCrop(
     }
   }
 
-  // Bullets
   for (const h of hazards) {
     if (h.kind === 'BULLET') {
       const b = h as BulletHazard;
@@ -173,7 +168,6 @@ function renderPeakSnapshotCrop(
     }
   }
 
-  // Sparks & Popups
   for (const s of sparks) {
     ctx.strokeStyle = s.color;
     ctx.lineWidth = 1.5;
@@ -183,10 +177,20 @@ function renderPeakSnapshotCrop(
     ctx.stroke();
   }
   for (const p of popups) {
-    drawStretchedMincho(ctx, p.text, p.x, p.y, p.isCritical ? 12 : 10, p.color, 1.3);
+    drawStretchedMincho(
+      ctx,
+      p.text,
+      p.x,
+      p.y,
+      p.isCritical ? 12 : 10,
+      p.color,
+      1.3,
+      'center',
+      3.0,
+      '#000000'
+    );
   }
 
-  // Player ship + Graze ring
   ctx.strokeStyle = '#00ffee';
   ctx.lineWidth = 1.8;
   ctx.beginPath();
@@ -210,7 +214,6 @@ function renderPeakSnapshotCrop(
 
   ctx.restore();
 
-  // Snapshot overlay caption banner
   ctx.fillStyle = 'rgba(9, 7, 6, 0.84)';
   ctx.fillRect(boxX, boxY + boxH - 36, boxW, 36);
   ctx.strokeStyle = '#ff9900';
@@ -243,7 +246,6 @@ export function renderResultCardCanvas(
   ctx.fillStyle = '#090706';
   ctx.fillRect(0, 0, 600, 400);
 
-  // Evangelion Hazard Stripe Borders
   ctx.save();
   for (let x = -40; x < 640; x += 24) {
     ctx.fillStyle = Math.floor(x / 24) % 2 === 0 ? '#ff9900' : '#000000';
@@ -269,7 +271,6 @@ export function renderResultCardCanvas(
   ctx.lineWidth = 2;
   ctx.strokeRect(2, 16, 596, 368);
 
-  // Left Column: Operation Report & Score
   drawStretchedMincho(
     ctx,
     isNewRecord ? '最高記録更新・極限達成' : '作戦終了・戦果報告',
@@ -320,7 +321,6 @@ export function renderResultCardCanvas(
 
   drawStretchedMincho(ctx, 'DODGE SURVIVOR', 28, 348, 20, '#ff9900', 1.3, 'left');
 
-  // Right Column: Peak Graze Moment Scene Cutout (x: 388..576, y: 50..356)
   const mapX = 388;
   const mapY = 50;
   const mapW = 188;
@@ -349,33 +349,69 @@ export function buildShareMessage(record: RankingRecord, isNewRecord: boolean): 
   ].join('\n');
 }
 
+function dataUrlToFile(dataUrl: string, filename: string): File | null {
+  try {
+    const parts = dataUrl.split(',');
+    if (parts.length < 2) return null;
+    const byteString = atob(parts[1]);
+    const bytes = new Uint8Array(byteString.length);
+    for (let i = 0; i < byteString.length; i++) {
+      bytes[i] = byteString.charCodeAt(i);
+    }
+    return new File([bytes], filename, { type: 'image/png' });
+  } catch {
+    return null;
+  }
+}
+
 export async function shareResultImage(
   canvas: HTMLCanvasElement,
   text: string
-): Promise<void> {
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob((b) => resolve(b), 'image/png')
-  );
+): Promise<'shared' | 'fallback'> {
+  // Build PNG File synchronously from dataURL so we never lose user gesture activation on mobile Safari/Chrome
+  const dataUrl = canvas.toDataURL('image/png');
+  const file = dataUrlToFile(dataUrl, 'dodge-survivor-result.png');
 
-  if (blob && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-    const file = new File([blob], 'dodge-survivor-result.png', { type: 'image/png' });
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     const shareData: ShareData =
-      typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
+      file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
         ? { text, files: [file] }
         : { text };
     try {
       await navigator.share(shareData);
-      return;
+      return 'shared';
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') {
+        return 'shared';
+      }
+      // Fall through to download + intent on error
+    }
+  }
+
+  // Fallback for non-HTTPS or desktop browsers: download the result card PNG + open X share / copy text
+  if (typeof document !== 'undefined') {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = 'dodge-survivor-result.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Ignore clipboard error
     }
   }
 
   if (typeof window !== 'undefined') {
-    window.open(
-      `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    const popup = window.open(tweetUrl, '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      window.location.href = tweetUrl;
+    }
   }
+  return 'fallback';
 }

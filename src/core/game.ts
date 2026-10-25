@@ -3,6 +3,7 @@ import {
   computeThreatLevel,
   getBombPhase,
   getLaserPhase,
+  nextJitteredInterval,
   spawnBombCluster,
   spawnBulletStream,
   spawnLaserFormation,
@@ -11,6 +12,7 @@ import {
 import { clampPlayerPosition } from './input';
 import {
   COMBO_HOLD_MS,
+  GAME_OVER_EXPLOSION_MS,
   GRAZE_TICK_MS,
   HUD_HEIGHT,
   INITIAL_LIVES,
@@ -31,6 +33,8 @@ export interface StepEvents {
   readonly grazeCount: number;
   readonly criticalGrazeCount: number;
   readonly directHit: boolean;
+  readonly lastLifeWarning: boolean;
+  readonly playerExploded: boolean;
   readonly gameOver: boolean;
   readonly spawnedLaserCount: number;
   readonly spawnedBombCount: number;
@@ -63,12 +67,13 @@ export function createInitialGameState(): GameState {
     totalGrazeCount: 0,
     lives: INITIAL_LIVES,
     survivalTimeMs: 0,
-    nextBulletInMs: 150,
-    nextLaserInMs: 650,
-    nextBombInMs: 1100,
+    nextBulletInMs: 120,
+    nextLaserInMs: 550,
+    nextBombInMs: 1250,
     spawnCounter: 0,
     screenShakeMs: 0,
     hitFlashMs: 0,
+    gameOverTimerMs: 0,
     recentScoreSamples: [],
     peakMoment: null,
   };
@@ -172,6 +177,8 @@ export function stepGame(
     grazeCount: 0,
     criticalGrazeCount: 0,
     directHit: false,
+    lastLifeWarning: false,
+    playerExploded: false,
     gameOver: false,
     spawnedLaserCount: 0,
     spawnedBombCount: 0,
@@ -184,6 +191,49 @@ export function stepGame(
   }
 
   const dtMs = Math.max(0, Math.min(MAX_STEP_DT_MS, rawDtMs));
+
+  // Lingering player explosion phase before transitioning to RESULT
+  if (state.phase === 'GAME_OVER') {
+    const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
+    const remainingTimer = state.gameOverTimerMs - dtMs;
+
+    // Spawn secondary explosion bursts while timer is active
+    if (remainingTimer > 400 && Math.floor((remainingTimer + dtMs) / 180) !== Math.floor(remainingTimer / 180)) {
+      for (let i = 0; i < 12; i++) {
+        const angle = rng() * Math.PI * 2;
+        const speed = 40 + rng() * 160;
+        fx.sparks.push({
+          x: state.player.x + (rng() - 0.5) * 16,
+          y: state.player.y + (rng() - 0.5) * 16,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: i % 2 === 0 ? '#ff3300' : '#ffcc00',
+          remainingMs: 650,
+          totalMs: 650,
+        });
+      }
+    }
+
+    const finished = remainingTimer <= 0;
+    return {
+      state: {
+        ...state,
+        phase: finished ? 'RESULT' : 'GAME_OVER',
+        hazards: stepHazards(state.hazards, dtMs * 0.35),
+        sparks: fx.sparks,
+        popups: fx.popups,
+        cutIn: fx.cutIn,
+        gameOverTimerMs: Math.max(0, remainingTimer),
+        screenShakeMs: Math.max(0, state.screenShakeMs - dtMs),
+        hitFlashMs: Math.max(0, state.hitFlashMs - dtMs),
+      },
+      events: {
+        ...emptyEvents,
+        gameOver: finished,
+      },
+    };
+  }
+
   const clampedPos = clampPlayerPosition(
     state.player.x + moveDelta.dx,
     state.player.y + moveDelta.dy
@@ -237,7 +287,7 @@ export function stepGame(
   const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
   let cutIn: CutInEffect | null = fx.cutIn;
 
-  // Independent continuous spawners for Bullet Streams, Lasers, and Bombs
+  // Independent continuous spawners with randomized jitter so lasers and bombs never lockstep
   const threat = computeThreatLevel(survivalTimeMs);
   let nextBulletInMs = state.nextBulletInMs - dtMs;
   let nextLaserInMs = state.nextLaserInMs - dtMs;
@@ -250,7 +300,7 @@ export function stepGame(
     spawnCounter += 1;
     const bullets = spawnBulletStream(threat, clampedPos, `s${spawnCounter}`, rng);
     hazards.push(...bullets);
-    nextBulletInMs = threat.bulletIntervalMs;
+    nextBulletInMs = nextJitteredInterval(threat.bulletIntervalMs, rng);
   }
 
   if (nextLaserInMs <= 0) {
@@ -258,16 +308,7 @@ export function stepGame(
     const lasers = spawnLaserFormation(threat, `s${spawnCounter}`, rng);
     hazards.push(...lasers);
     spawnedLaserCount = lasers.length;
-    nextLaserInMs = threat.laserIntervalMs;
-    if (!cutIn) {
-      cutIn = {
-        topText: '高エネルギー反応',
-        bottomText: `LASER INTERSECTION`,
-        color: '#ff4400',
-        remainingMs: 650,
-        totalMs: 650,
-      };
-    }
+    nextLaserInMs = nextJitteredInterval(threat.laserIntervalMs, rng);
   }
 
   if (nextBombInMs <= 0) {
@@ -275,16 +316,7 @@ export function stepGame(
     const bombs = spawnBombCluster(threat, clampedPos, `s${spawnCounter}`, rng);
     hazards.push(...bombs);
     spawnedBombCount = bombs.length;
-    nextBombInMs = threat.bombIntervalMs;
-    if (!cutIn) {
-      cutIn = {
-        topText: '爆撃圏ロックオン',
-        bottomText: `BOMBING LOCK-ON`,
-        color: '#ff8800',
-        remainingMs: 620,
-        totalMs: 620,
-      };
-    }
+    nextBombInMs = nextJitteredInterval(threat.bombIntervalMs, rng);
   }
 
   let score = state.score;
@@ -297,11 +329,13 @@ export function stepGame(
   let nextInvulnerableMs = invulnerableMs;
   let screenShakeMs = Math.max(0, state.screenShakeMs - dtMs);
   let hitFlashMs = Math.max(0, state.hitFlashMs - dtMs);
+  let gameOverTimerMs = state.gameOverTimerMs;
 
   let grazeCount = 0;
   let criticalGrazeCount = 0;
   let directHit = false;
-  let gameOver = false;
+  let lastLifeWarning = false;
+  let playerExploded = false;
   let frameScoreGain = 0;
 
   if (invulnerableMs === 0) {
@@ -318,19 +352,45 @@ export function stepGame(
       comboMultiplier = 1.0;
       comboGauge = 0;
       nextInvulnerableMs = INVULNERABLE_MS;
-      screenShakeMs = 420;
-      hitFlashMs = 360;
+      screenShakeMs = 460;
+      hitFlashMs = 380;
       hazards = hazards.map((h) => (h.grazeTimerMs !== 0 ? { ...h, grazeTimerMs: 0 } : h));
 
       if (lives === 0) {
-        gameOver = true;
-        phase = 'RESULT';
+        playerExploded = true;
+        phase = 'GAME_OVER';
+        gameOverTimerMs = GAME_OVER_EXPLOSION_MS;
+        screenShakeMs = 900;
+        hitFlashMs = 700;
         cutIn = {
-          topText: '作戦終了・全機喪失',
-          bottomText: 'OPERATION TERMINATED',
+          topText: '全機喪失・撃墜',
+          bottomText: 'SIGNAL LOST',
           color: '#ff2200',
-          remainingMs: 2000,
-          totalMs: 2000,
+          remainingMs: GAME_OVER_EXPLOSION_MS,
+          totalMs: GAME_OVER_EXPLOSION_MS,
+        };
+        // Massive explosion debris burst from player coordinates
+        for (let i = 0; i < 42; i++) {
+          const angle = (i / 42) * Math.PI * 2 + (rng() - 0.5) * 0.2;
+          const speed = 35 + rng() * 220;
+          fx.sparks.push({
+            x: clampedPos.x,
+            y: clampedPos.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            color: i % 3 === 0 ? '#ffffff' : i % 2 === 0 ? '#ffcc00' : '#ff3300',
+            remainingMs: 1100,
+            totalMs: 1100,
+          });
+        }
+      } else if (lives === 1) {
+        lastLifeWarning = true;
+        cutIn = {
+          topText: '最終防衛線・残機壱',
+          bottomText: 'WARNING: LAST LIFE',
+          color: '#ff0033',
+          remainingMs: 1500,
+          totalMs: 1500,
         };
       } else {
         cutIn = {
@@ -381,11 +441,11 @@ export function stepGame(
             if (fx.popups.length < 24) {
               fx.popups.push({
                 x: clampedPos.x + (rng() - 0.5) * 32,
-                y: clampedPos.y - 14 - rng() * 12,
+                y: clampedPos.y - 16 - rng() * 12,
                 text: reward.isCritical ? `極限 +${reward.scoreDelta}!!` : `+${reward.scoreDelta}`,
                 color: reward.isCritical ? '#ffcc00' : '#00ffee',
                 isCritical: reward.isCritical,
-                remainingMs: 480,
+                remainingMs: 520,
               });
             }
           }
@@ -424,7 +484,7 @@ export function stepGame(
   const windowTotalScore = recentScoreSamples.reduce((sum, s) => sum + s.scoreDelta, 0);
   const windowScoreRatePerSec = Math.round(windowTotalScore * (1000 / PEAK_WINDOW_MS));
 
-  const nextSparks = fx.sparks.slice(-90);
+  const nextSparks = fx.sparks.slice(-110);
   const nextPlayer = {
     x: clampedPos.x,
     y: clampedPos.y,
@@ -479,6 +539,7 @@ export function stepGame(
       spawnCounter,
       screenShakeMs,
       hitFlashMs,
+      gameOverTimerMs,
       recentScoreSamples,
       peakMoment,
     },
@@ -486,7 +547,9 @@ export function stepGame(
       grazeCount,
       criticalGrazeCount,
       directHit,
-      gameOver,
+      lastLifeWarning,
+      playerExploded,
+      gameOver: false,
       spawnedLaserCount,
       spawnedBombCount,
       bombDetonatedCount,

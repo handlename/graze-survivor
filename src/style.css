@@ -55,15 +55,15 @@ body.playing .options-panel {
 
 .pause-hud-btn {
   position: absolute;
-  top: 52px;
+  top: 60px;
   right: 8px;
   z-index: 10;
-  background: rgba(18, 12, 8, 0.85);
+  background: rgba(18, 12, 8, 0.88);
   color: #ff9900;
   border: 1px solid #ff9900;
-  padding: 4px 8px;
+  padding: 5px 9px;
   font-family: inherit;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 800;
   cursor: pointer;
   letter-spacing: 0.04em;
@@ -221,6 +221,24 @@ body.playing .options-panel {
 .option-label {
   color: #ff9900;
   font-weight: bold;
+}
+
+.sensor-status {
+  color: #ffcc00;
+  background: rgba(255, 60, 0, 0.18);
+  border: 1px solid #ff6600;
+  padding: 4px 6px;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.sensor-status a {
+  color: #00ffee;
+  text-decoration: underline;
+}
+
+.sensor-status.hidden {
+  display: none;
 }
 
 .btn-group {

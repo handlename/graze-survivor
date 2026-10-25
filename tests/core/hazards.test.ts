@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   computeThreatLevel,
   getBombPhase,
-  spawnBulletStream,
+  nextJitteredInterval,
   spawnBombCluster,
+  spawnBulletStream,
   spawnLaserFormation,
   stepHazards,
 } from '../../src/core/hazards';
@@ -44,31 +45,31 @@ describe('hazards lifecycle and continuous spawners', () => {
     expect(expired.phase).toBe('EXPIRED');
   });
 
-  it('keeps bullet speed slow and constant across threat levels while increasing bullet count and shortening intervals', () => {
+  it('keeps bullet speed slow and constant across threat levels while increasing bullet count and varying bullet patterns', () => {
     const t0 = computeThreatLevel(0);
     const t120 = computeThreatLevel(120_000);
 
     expect(t0.bulletSpeed).toBe(t120.bulletSpeed);
     expect(t0.bulletSpeed).toBeLessThanOrEqual(110);
     expect(t120.bulletsPerStream).toBeGreaterThan(t0.bulletsPerStream);
-    expect(t120.bulletIntervalMs).toBeLessThan(t0.bulletIntervalMs);
-    expect(t120.laserIntervalMs).toBeLessThan(t0.laserIntervalMs);
-    expect(t120.bombIntervalMs).toBeLessThan(t0.bombIntervalMs);
 
-    let seed = 0.3;
-    const rng = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
+    // Verify all 4 bullet pattern variations (0: LINE, 1: FAN, 2: SPIRAL, 3: CROSS) produce constant-speed bullets
+    for (const patternRoll of [0.1, 0.35, 0.6, 0.85]) {
+      const rng = () => patternRoll;
+      const bullets = spawnBulletStream(t0, { x: 180, y: 340 }, `p-${patternRoll}`, rng);
+      expect(bullets.length).toBeGreaterThanOrEqual(t0.bulletsPerStream);
+      for (const b of bullets) {
+        expect(Math.hypot(b.vx, b.vy)).toBeCloseTo(t0.bulletSpeed, 3);
+      }
+    }
+  });
 
-    const stream0 = spawnBulletStream(t0, { x: 180, y: 340 }, 's0', rng);
-    const stream120 = spawnBulletStream(t120, { x: 180, y: 340 }, 's120', rng);
-
-    expect(stream120.length).toBeGreaterThan(stream0.length);
-    const speed0 = Math.hypot(stream0[0].vx, stream0[0].vy);
-    const speed120 = Math.hypot(stream120[0].vx, stream120[0].vy);
-    expect(speed0).toBeCloseTo(speed120, 4);
-    expect(speed0).toBeLessThanOrEqual(115);
+  it('randomizes laser and bomb spawn intervals with jitter so their timings desynchronize', () => {
+    const low = nextJitteredInterval(1000, () => 0.0);
+    const high = nextJitteredInterval(1000, () => 1.0);
+    expect(low).toBeLessThan(800);
+    expect(high).toBeGreaterThan(1200);
+    expect(low).not.toBe(high);
   });
 
   it('spawns continuous laser formations and bomb clusters and removes expired hazards', () => {

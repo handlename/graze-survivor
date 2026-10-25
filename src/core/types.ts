@@ -11,6 +11,7 @@ export const BASE_TICK_SCORE = 100;
 export const COMBO_HOLD_MS = 1800;
 export const INVULNERABLE_MS = 1500;
 export const INITIAL_LIVES = 3;
+export const GAME_OVER_EXPLOSION_MS = 1600;
 
 export interface Vector2D {
   readonly x: number;
@@ -120,7 +121,7 @@ export interface RankingRecord {
   readonly timestamp: string;
 }
 
-export type GamePhase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'RESULT';
+export type GamePhase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'GAME_OVER' | 'RESULT';
 
 export interface ScoreSample {
   readonly timeMs: number;
@@ -157,6 +158,7 @@ export interface GameState {
   readonly spawnCounter: number;
   readonly screenShakeMs: number;
   readonly hitFlashMs: number;
+  readonly gameOverTimerMs: number;
   readonly recentScoreSamples: readonly ScoreSample[];
   readonly peakMoment: PeakMomentSnapshot | null;
 }

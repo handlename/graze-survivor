@@ -57,8 +57,11 @@ describe('core game engine loop', () => {
     expect(next.peakMoment?.hazards.length).toBe(2);
   });
 
-  it('continuously spawns hazards without waiting for existing hazards to disappear', () => {
-    const initial = startNewGame(createInitialGameState());
+  it('continuously spawns hazards without waiting for existing hazards to disappear and without background warning cut-in text', () => {
+    const initial = {
+      ...startNewGame(createInitialGameState()),
+      cutIn: null,
+    };
     const existingBullet: Hazard = {
       id: 'existing-1',
       kind: 'BULLET',
@@ -78,11 +81,97 @@ describe('core game engine loop', () => {
     };
 
     const { state: afterStep } = stepGame(readyToSpawn, 20, { dx: 0, dy: 0 });
-    // Existing bullet is still present AND new bullets, lasers, and bombs were added alongside it
     expect(afterStep.hazards.some((h) => h.id === 'existing-1')).toBe(true);
     expect(afterStep.hazards.some((h) => h.kind === 'LASER')).toBe(true);
     expect(afterStep.hazards.some((h) => h.kind === 'BOMB')).toBe(true);
     expect(afterStep.hazards.filter((h) => h.kind === 'BULLET').length).toBeGreaterThan(1);
+    // Spawning lasers/bombs must NOT inject background warning cut-in text
+    expect(afterStep.cutIn).toBeNull();
+  });
+
+  it('triggers last-life warning cut-in when reduced to 1 life', () => {
+    const initial = startNewGame(createInitialGameState());
+    const hitBullet: Hazard = {
+      id: 'hit-b',
+      kind: 'BULLET',
+      x: 180,
+      y: 350,
+      vx: 0,
+      vy: 0,
+      radius: 4,
+      grazeTimerMs: 0,
+    };
+    const stateAt2Lives = {
+      ...initial,
+      lives: 2,
+      player: { ...initial.player, x: 180, y: 350 },
+      hazards: [hitBullet],
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
+    };
+
+    const { state: at1Life, events } = stepGame(stateAt2Lives, 50, { dx: 0, dy: 0 });
+    expect(events.directHit).toBe(true);
+    expect(events.lastLifeWarning).toBe(true);
+    expect(at1Life.lives).toBe(1);
+    expect(at1Life.cutIn?.topText).toContain('残機壱');
+  });
+
+  it('enters GAME_OVER explosion phase at 0 lives before transitioning to RESULT after explosion timer completes', () => {
+    const initial = startNewGame(createInitialGameState());
+    const hazards: Hazard[] = [
+      {
+        id: 'graze-bullet',
+        kind: 'BULLET',
+        x: 192,
+        y: 350,
+        vx: 0,
+        vy: 0,
+        radius: 3,
+        grazeTimerMs: 0,
+      },
+      {
+        id: 'hit-bullet',
+        kind: 'BULLET',
+        x: 180,
+        y: 350,
+        vx: 0,
+        vy: 0,
+        radius: 4,
+        grazeTimerMs: 0,
+      },
+    ];
+    const state = {
+      ...initial,
+      lives: 1,
+      comboMultiplier: 15.0,
+      comboGauge: 1.0,
+      player: { ...initial.player, x: 180, y: 350 },
+      hazards,
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
+    };
+
+    const { state: exploding, events } = stepGame(state, 50, { dx: 0, dy: 0 });
+    expect(events.directHit).toBe(true);
+    expect(events.grazeCount).toBe(0);
+    expect(exploding.lives).toBe(0);
+    expect(exploding.phase).toBe('GAME_OVER');
+    expect(exploding.gameOverTimerMs).toBeGreaterThan(1000);
+    expect(exploding.sparks.length).toBeGreaterThan(20);
+
+    // Step through the explosion lingering duration (~1600ms) until RESULT
+    let current = exploding;
+    let sawGameOverEvent = false;
+    for (let i = 0; i < 40; i++) {
+      const res = stepGame(current, 50, { dx: 0, dy: 0 });
+      current = res.state;
+      if (res.events.gameOver) sawGameOverEvent = true;
+    }
+    expect(sawGameOverEvent).toBe(true);
+    expect(current.phase).toBe('RESULT');
   });
 
   it('freezes hazard movement, timers, and survival time while PAUSED and resumes cleanly', () => {
@@ -123,52 +212,6 @@ describe('core game engine loop', () => {
     expect(current.comboGauge).toBe(0);
     expect(current.comboMultiplier).toBeLessThan(10.0);
     expect(current.comboMultiplier).toBeGreaterThanOrEqual(1.0);
-  });
-
-  it('prioritizes Direct Hit over simultaneous Graze on the same frame and triggers game over at 0 lives', () => {
-    const initial = startNewGame(createInitialGameState());
-    const hazards: Hazard[] = [
-      {
-        id: 'graze-bullet',
-        kind: 'BULLET',
-        x: 192,
-        y: 350,
-        vx: 0,
-        vy: 0,
-        radius: 3,
-        grazeTimerMs: 0,
-      },
-      {
-        id: 'hit-bullet',
-        kind: 'BULLET',
-        x: 180,
-        y: 350,
-        vx: 0,
-        vy: 0,
-        radius: 4,
-        grazeTimerMs: 0,
-      },
-    ];
-    const state = {
-      ...initial,
-      lives: 1,
-      comboMultiplier: 15.0,
-      comboGauge: 1.0,
-      player: { ...initial.player, x: 180, y: 350 },
-      hazards,
-      nextBulletInMs: 9999,
-      nextLaserInMs: 9999,
-      nextBombInMs: 9999,
-    };
-
-    const { state: afterHit, events } = stepGame(state, 50, { dx: 0, dy: 0 });
-    expect(events.directHit).toBe(true);
-    expect(events.grazeCount).toBe(0);
-    expect(events.gameOver).toBe(true);
-    expect(afterHit.lives).toBe(0);
-    expect(afterHit.comboMultiplier).toBe(1.0);
-    expect(afterHit.comboGauge).toBe(0);
-    expect(afterHit.phase).toBe('RESULT');
   });
 
   it('clamps huge dtMs spikes (e.g. 3000ms tab switch) to 50ms max step', () => {

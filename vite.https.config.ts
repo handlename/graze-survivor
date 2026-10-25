@@ -5,7 +5,7 @@ export default defineConfig({
   base: './',
   server: {
     host: true,
-    port: 5173,
+    port: 5174,
     https:
       fs.existsSync('certs/key.pem') && fs.existsSync('certs/cert.pem')
         ? {

@@ -1,6 +1,7 @@
 import { getBombPhase, getLaserPhase } from '../core/hazards';
 import {
   CORE_RADIUS,
+  GAME_OVER_EXPLOSION_MS,
   GRAZE_RADIUS,
   HUD_HEIGHT,
   INITIAL_LIVES,
@@ -24,15 +25,23 @@ export function drawStretchedMincho(
   sizePx: number,
   color: string,
   scaleY = 1.38,
-  align: CanvasTextAlign = 'center'
+  align: CanvasTextAlign = 'center',
+  outlineWidth = 0,
+  outlineColor = '#000000'
 ): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(1, scaleY);
   ctx.font = `900 ${sizePx}px ${MINCHO_FONT_FAMILY}`;
-  ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
+  if (outlineWidth > 0) {
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = outlineWidth;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(text, 0, 0);
+  }
+  ctx.fillStyle = color;
   ctx.fillText(text, 0, 0);
   ctx.restore();
 }
@@ -100,7 +109,7 @@ export class CanvasRenderer {
     ctx.clip();
 
     if (state.screenShakeMs > 0) {
-      const intensity = Math.min(6, (state.screenShakeMs / 400) * 6);
+      const intensity = Math.min(7, (state.screenShakeMs / 400) * 6);
       const ox = (Math.random() - 0.5) * intensity * 2;
       const oy = (Math.random() - 0.5) * intensity * 2;
       ctx.translate(ox, oy);
@@ -124,6 +133,27 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Persistent Last-Life Danger Border & Warning Pulse when lives === 1
+    if (state.phase === 'PLAYING' && state.lives === 1) {
+      const pulse = 0.5 + 0.5 * Math.sin(state.survivalTimeMs * 0.012);
+      ctx.strokeStyle = `rgba(255, 0, 40, ${0.35 + pulse * 0.5})`;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(2.5, HUD_HEIGHT + 2.5, LOGICAL_WIDTH - 5, LOGICAL_HEIGHT - HUD_HEIGHT - 5);
+
+      drawStretchedMincho(
+        ctx,
+        '警告・残機壱',
+        LOGICAL_WIDTH / 2,
+        HUD_HEIGHT + 24,
+        14,
+        `rgba(255, 40, 60, ${0.55 + pulse * 0.45})`,
+        1.3,
+        'center',
+        2.5,
+        '#000000'
+      );
+    }
+
     // Calibration guide crosshair on Title/Result
     if (isCalibrationPhase) {
       const cx = LOGICAL_WIDTH / 2;
@@ -143,13 +173,13 @@ export class CanvasRenderer {
 
     // Background Evangelion Mincho Cut-In
     if (state.cutIn) {
-      const alpha = Math.min(1, state.cutIn.remainingMs / 180) * 0.28;
+      const alpha = Math.min(1, state.cutIn.remainingMs / 180) * 0.32;
       drawStretchedMincho(
         ctx,
         state.cutIn.topText,
         LOGICAL_WIDTH / 2,
         HUD_HEIGHT + 145,
-        54,
+        52,
         `rgba(255, 153, 0, ${alpha})`,
         1.45
       );
@@ -158,7 +188,7 @@ export class CanvasRenderer {
         state.cutIn.bottomText,
         LOGICAL_WIDTH / 2,
         LOGICAL_HEIGHT - 125,
-        36,
+        34,
         `rgba(255, 255, 255, ${alpha * 0.85})`,
         1.38
       );
@@ -193,34 +223,41 @@ export class CanvasRenderer {
       const alpha = Math.max(0, s.remainingMs / s.totalMs);
       ctx.strokeStyle = s.color;
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - s.vx * 0.035, s.y - s.vy * 0.035);
+      ctx.lineTo(s.x - s.vx * 0.04, s.y - s.vy * 0.04);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
-    // Score Popups
+    // Score Popups (with bold black outline for high legibility over bright lasers/bombs)
     for (const p of state.popups) {
       drawStretchedMincho(
         ctx,
         p.text,
         p.x,
         p.y,
-        p.isCritical ? 14 : 11,
+        p.isCritical ? 15 : 12,
         p.color,
-        1.3
+        1.32,
+        'center',
+        3.6,
+        '#000000'
       );
     }
 
-    // Player Craft (drawn even on Title/Result for live sensitivity testing)
-    this.renderPlayer(ctx, state);
+    // Player Craft or Destruction Shockwaves
+    if (state.phase === 'GAME_OVER') {
+      this.renderPlayerExplosion(ctx, state);
+    } else {
+      this.renderPlayer(ctx, state);
+    }
 
     ctx.restore();
 
     // Playfield frame border
-    ctx.strokeStyle = '#ff9900';
+    ctx.strokeStyle = state.lives === 1 && state.phase === 'PLAYING' ? '#ff0033' : '#ff9900';
     ctx.lineWidth = 1.2;
     ctx.strokeRect(0.6, HUD_HEIGHT + 0.6, LOGICAL_WIDTH - 1.2, LOGICAL_HEIGHT - HUD_HEIGHT - 1.2);
 
@@ -234,7 +271,6 @@ export class CanvasRenderer {
     ctx.lineWidth = 1.2;
     ctx.strokeRect(0.6, 0.6, LOGICAL_WIDTH - 1.2, HUD_HEIGHT - 1.2);
 
-    // Score & Survival Time
     ctx.fillStyle = '#ff9900';
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'left';
@@ -246,7 +282,6 @@ export class CanvasRenderer {
     ctx.font = 'bold 10px monospace';
     ctx.fillText(`TIME ${formatSurvivalTime(state.survivalTimeMs)}`, 10, 48);
 
-    // Center Combo Box
     const boxX = 140;
     const boxW = 96;
     ctx.fillStyle = '#070504';
@@ -270,11 +305,10 @@ export class CanvasRenderer {
     ctx.fillStyle = '#00ffee';
     ctx.fillRect(boxX + 8, 40, (boxW - 16) * Math.max(0, Math.min(1, state.comboGauge)), 5);
 
-    // Right Lives
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#ff9900';
+    ctx.fillStyle = state.lives === 1 ? '#ff0033' : '#ff9900';
     ctx.font = 'bold 10px monospace';
-    ctx.fillText('LIFE', LOGICAL_WIDTH - 10, 14);
+    ctx.fillText(state.lives === 1 ? 'DANGER' : 'LIFE', LOGICAL_WIDTH - 10, 14);
     for (let i = 0; i < INITIAL_LIVES; i++) {
       const active = i < state.lives;
       ctx.fillStyle = active ? '#ff2200' : '#2a1111';
@@ -289,7 +323,6 @@ export class CanvasRenderer {
     if (bomb.elapsedMs < 0) return;
     const info = getBombPhase(bomb);
     if (info.phase === 'CONVERGING') {
-      // Single fast convergence from outer ring to actual blast radius (true size unknown until HOLD)
       ctx.fillStyle = 'rgba(255, 60, 0, 0.06)';
       ctx.strokeStyle = 'rgba(255, 190, 0, 0.85)';
       ctx.lineWidth = 1.5;
@@ -307,14 +340,7 @@ export class CanvasRenderer {
       ctx.fill();
       ctx.stroke();
     } else if (info.phase === 'ACTIVE') {
-      // Graze perimeter hint
-      ctx.strokeStyle = 'rgba(0, 255, 238, 0.28)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(bomb.x, bomb.y, bomb.blastRadius + GRAZE_RADIUS, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Active blast core
+      // Only render the actual blast core (outer thin graze guide ring removed)
       ctx.fillStyle = 'rgba(255, 80, 0, 0.72)';
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2.5;
@@ -326,9 +352,9 @@ export class CanvasRenderer {
   }
 
   private renderLaser(ctx: CanvasRenderingContext2D, laser: LaserHazard): void {
+    if (laser.elapsedMs < 0) return;
     const phase = getLaserPhase(laser);
     if (phase === 'WARNING') {
-      // High-speed sightline draw-in over the first 120ms
       const drawProgress = Math.min(1, laser.elapsedMs / 120);
       const ex = laser.x1 + (laser.x2 - laser.x1) * drawProgress;
       const ey = laser.y1 + (laser.y2 - laser.y1) * drawProgress;
@@ -344,7 +370,6 @@ export class CanvasRenderer {
       ctx.stroke();
       ctx.restore();
     } else if (phase === 'ACTIVE') {
-      // Outer glow
       ctx.strokeStyle = 'rgba(255, 0, 85, 0.38)';
       ctx.lineWidth = laser.halfWidth * 3.4;
       ctx.beginPath();
@@ -352,7 +377,6 @@ export class CanvasRenderer {
       ctx.lineTo(laser.x2, laser.y2);
       ctx.stroke();
 
-      // Mid beam
       ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
       ctx.lineWidth = laser.halfWidth * 2;
       ctx.beginPath();
@@ -360,7 +384,6 @@ export class CanvasRenderer {
       ctx.lineTo(laser.x2, laser.y2);
       ctx.stroke();
 
-      // Razor-sharp white core
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = Math.max(2, laser.halfWidth * 0.7);
       ctx.beginPath();
@@ -382,10 +405,41 @@ export class CanvasRenderer {
     ctx.fill();
   }
 
+  private renderPlayerExplosion(ctx: CanvasRenderingContext2D, state: GameState): void {
+    const { x, y } = state.player;
+    const progress =
+      1 - Math.max(0, Math.min(1, state.gameOverTimerMs / GAME_OVER_EXPLOSION_MS));
+
+    // Expanding shockwave rings
+    const r1 = 8 + progress * 140;
+    const alpha1 = Math.max(0, 1 - progress);
+    ctx.strokeStyle = `rgba(255, 200, 0, ${alpha1})`;
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(x, y, r1, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (progress > 0.18) {
+      const p2 = (progress - 0.18) / 0.82;
+      const r2 = 6 + p2 * 95;
+      ctx.strokeStyle = `rgba(255, 40, 0, ${Math.max(0, 1 - p2)})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (progress < 0.45) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress / 0.45})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 18 * (1 - progress), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   private renderPlayer(ctx: CanvasRenderingContext2D, state: GameState): void {
     const { x, y, invulnerableMs, trail } = state.player;
 
-    // Motion trail
     if (trail.length > 1) {
       ctx.strokeStyle = 'rgba(0, 255, 238, 0.32)';
       ctx.lineWidth = 1.5;
@@ -401,14 +455,12 @@ export class CanvasRenderer {
       return;
     }
 
-    // Graze Ring (GRAZE_RADIUS = 24)
     ctx.strokeStyle = state.comboGauge > 0.8 ? '#00ffee' : 'rgba(0, 255, 220, 0.45)';
     ctx.lineWidth = state.comboGauge > 0.8 ? 1.8 : 1.0;
     ctx.beginPath();
     ctx.arc(x, y, GRAZE_RADIUS, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Fighter hull
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
@@ -419,7 +471,6 @@ export class CanvasRenderer {
     ctx.closePath();
     ctx.stroke();
 
-    // Exact Core Hitbox (CORE_RADIUS = 3.0)
     ctx.fillStyle = '#00ffee';
     ctx.beginPath();
     ctx.arc(x, y, CORE_RADIUS, 0, Math.PI * 2);

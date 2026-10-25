@@ -67,7 +67,7 @@ export class SoundController {
         const start = now + i * 0.07;
         osc.type = 'square';
         osc.frequency.setValueAtTime(1480, start);
-        gain.gain.setValueAtTime(0.06, start);
+        gain.gain.setValueAtTime(0.05, start);
         gain.gain.exponentialRampToValueAtTime(0.001, start + 0.045);
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -137,6 +137,54 @@ export class SoundController {
       gain.connect(ctx.destination);
       osc.start(now);
       osc.stop(now + 0.42);
+    } catch {
+      // Ignore audio errors
+    }
+  }
+
+  public playLastLifeSirens(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = now + i * 0.16;
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(660, start);
+        osc.frequency.linearRampToValueAtTime(980, start + 0.13);
+        gain.gain.setValueAtTime(0.16, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.155);
+      }
+    } catch {
+      // Ignore audio errors
+    }
+  }
+
+  public playPlayerExplosion(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      for (let i = 0; i < 4; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = now + i * 0.22;
+        osc.type = i % 2 === 0 ? 'sawtooth' : 'triangle';
+        osc.frequency.setValueAtTime(180 - i * 25, start);
+        osc.frequency.exponentialRampToValueAtTime(28, start + 0.45);
+        gain.gain.setValueAtTime(0.24, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.48);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.5);
+      }
     } catch {
       // Ignore audio errors
     }
