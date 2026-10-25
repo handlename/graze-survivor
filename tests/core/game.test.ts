@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialGameState, startNewGame, stepGame } from '../../src/core/game';
+import {
+  createInitialGameState,
+  startNewGame,
+  stepGame,
+  togglePauseGame,
+} from '../../src/core/game';
 import type { Hazard } from '../../src/core/types';
 
 describe('core game engine loop', () => {
-  it('stacks simultaneous graze ticks across multiple intersecting lasers', () => {
+  it('stacks simultaneous graze ticks across multiple intersecting lasers and captures peak moment snapshot', () => {
     const initial = startNewGame(createInitialGameState());
     const lasers: Hazard[] = [
       {
@@ -33,12 +38,13 @@ describe('core game engine loop', () => {
         grazeTimerMs: 0,
       },
     ];
-    // Place player at (192, 312): 12px from both laser centers -> distanceToEdge = 7px (inside graze ring of both!)
     const stateWithLasers = {
       ...initial,
       player: { ...initial.player, x: 192, y: 312 },
       hazards: lasers,
-      nextWaveInMs: 9999,
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
     };
 
     const { state: next, events } = stepGame(stateWithLasers, 50, { dx: 0, dy: 0 });
@@ -46,6 +52,52 @@ describe('core game engine loop', () => {
     expect(next.score).toBeGreaterThan(400);
     expect(next.comboMultiplier).toBeGreaterThan(1.4);
     expect(next.comboGauge).toBe(1.0);
+    expect(next.peakMoment).not.toBeNull();
+    expect(next.peakMoment?.windowScoreRatePerSec).toBeGreaterThan(0);
+    expect(next.peakMoment?.hazards.length).toBe(2);
+  });
+
+  it('continuously spawns hazards without waiting for existing hazards to disappear', () => {
+    const initial = startNewGame(createInitialGameState());
+    const existingBullet: Hazard = {
+      id: 'existing-1',
+      kind: 'BULLET',
+      x: 100,
+      y: 200,
+      vx: 0,
+      vy: 50,
+      radius: 4,
+      grazeTimerMs: 0,
+    };
+    const readyToSpawn = {
+      ...initial,
+      hazards: [existingBullet],
+      nextBulletInMs: 10,
+      nextLaserInMs: 10,
+      nextBombInMs: 10,
+    };
+
+    const { state: afterStep } = stepGame(readyToSpawn, 20, { dx: 0, dy: 0 });
+    // Existing bullet is still present AND new bullets, lasers, and bombs were added alongside it
+    expect(afterStep.hazards.some((h) => h.id === 'existing-1')).toBe(true);
+    expect(afterStep.hazards.some((h) => h.kind === 'LASER')).toBe(true);
+    expect(afterStep.hazards.some((h) => h.kind === 'BOMB')).toBe(true);
+    expect(afterStep.hazards.filter((h) => h.kind === 'BULLET').length).toBeGreaterThan(1);
+  });
+
+  it('freezes hazard movement, timers, and survival time while PAUSED and resumes cleanly', () => {
+    const playing = startNewGame(createInitialGameState());
+    const paused = togglePauseGame(playing);
+    expect(paused.phase).toBe('PAUSED');
+
+    const { state: whilePaused } = stepGame(paused, 50, { dx: 15, dy: -10 });
+    expect(whilePaused.survivalTimeMs).toBe(0);
+    expect(whilePaused.player.x).toBe(paused.player.x);
+
+    const resumed = togglePauseGame(whilePaused);
+    expect(resumed.phase).toBe('PLAYING');
+    const { state: afterResume } = stepGame(resumed, 50, { dx: 0, dy: 0 });
+    expect(afterResume.survivalTimeMs).toBe(50);
   });
 
   it('holds comboMultiplier while comboGauge > 0 (1.8s), then decays multiplier toward 1.0', () => {
@@ -53,10 +105,11 @@ describe('core game engine loop', () => {
       ...startNewGame(createInitialGameState()),
       comboMultiplier: 10.0,
       comboGauge: 1.0,
-      nextWaveInMs: 99999,
+      nextBulletInMs: 99999,
+      nextLaserInMs: 99999,
+      nextBombInMs: 99999,
     };
 
-    // After 900ms (half of 1800ms), gauge is ~0.5 and multiplier is still 10.0
     let current = initial;
     for (let i = 0; i < 18; i++) {
       current = stepGame(current, 50, { dx: 0, dy: 0 }).state;
@@ -64,7 +117,6 @@ describe('core game engine loop', () => {
     expect(current.comboGauge).toBeCloseTo(0.5, 2);
     expect(current.comboMultiplier).toBeCloseTo(10.0, 4);
 
-    // After another 1000ms, gauge hits 0 and multiplier decays below 10.0
     for (let i = 0; i < 20; i++) {
       current = stepGame(current, 50, { dx: 0, dy: 0 }).state;
     }
@@ -104,7 +156,9 @@ describe('core game engine loop', () => {
       comboGauge: 1.0,
       player: { ...initial.player, x: 180, y: 350 },
       hazards,
-      nextWaveInMs: 9999,
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
     };
 
     const { state: afterHit, events } = stepGame(state, 50, { dx: 0, dy: 0 });
@@ -122,7 +176,9 @@ describe('core game engine loop', () => {
       ...startNewGame(createInitialGameState()),
       comboMultiplier: 8.0,
       comboGauge: 1.0,
-      nextWaveInMs: 9999,
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
     };
     const { state: afterSpike } = stepGame(initial, 3000, { dx: 0, dy: 0 });
     expect(afterSpike.survivalTimeMs).toBe(50);

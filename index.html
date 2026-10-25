@@ -14,12 +14,28 @@
       <div class="cabinet" id="cabinet">
         <canvas id="game-canvas" aria-label="DODGE SURVIVOR playfield"></canvas>
 
+        <!-- In-Game Pause Button -->
+        <button id="btn-pause" type="button" class="pause-hud-btn hidden" aria-label="Pause Game">
+          PAUSE
+        </button>
+
         <!-- Title Screen Overlay -->
         <section id="title-overlay" class="overlay active">
           <div class="overlay-card">
             <h1 class="eva-title">DODGE SURVIVOR</h1>
             <p class="best-line" id="title-best">BEST SCORE: 0</p>
             <button id="btn-start" type="button" class="primary-btn">START GAME</button>
+          </div>
+        </section>
+
+        <!-- Pause Screen Overlay -->
+        <section id="pause-overlay" class="overlay">
+          <div class="overlay-card">
+            <div class="eva-result-heading">一時停止・作戦中断</div>
+            <div class="result-actions">
+              <button id="btn-resume" type="button" class="primary-btn">RESUME</button>
+              <button id="btn-quit" type="button" class="secondary-btn">TITLE</button>
+            </div>
           </div>
         </section>
 
@@ -44,7 +60,7 @@
         </section>
       </div>
 
-      <!-- Live Options Panel (Visible on Title & Result screens only) -->
+      <!-- Live Options Panel (Visible on Title, Pause, and Result screens) -->
       <aside id="options-panel" class="options-panel">
         <div class="option-row">
           <span class="option-label">CONTROL MODE</span>

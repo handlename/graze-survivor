@@ -8,6 +8,8 @@ import {
   type LaserHazard,
 } from './types';
 
+export const CONSTANT_BULLET_SPEED = 92;
+
 export function getBombPhase(bomb: BombHazard): {
   readonly phase: 'CONVERGING' | 'HOLD' | 'ACTIVE' | 'EXPIRED';
   readonly currentRingRadius: number;
@@ -57,10 +59,10 @@ export function stepHazards(hazards: readonly Hazard[], dtMs: number): readonly 
       const x = h.x + h.vx * dtSec;
       const y = h.y + h.vy * dtSec;
       if (
-        x >= -60 &&
-        x <= LOGICAL_WIDTH + 60 &&
-        y >= HUD_HEIGHT - 60 &&
-        y <= LOGICAL_HEIGHT + 60
+        x >= -140 &&
+        x <= LOGICAL_WIDTH + 140 &&
+        y >= HUD_HEIGHT - 140 &&
+        y <= LOGICAL_HEIGHT + 140
       ) {
         next.push({ ...h, x, y });
       }
@@ -80,27 +82,34 @@ export function stepHazards(hazards: readonly Hazard[], dtMs: number): readonly 
   return next;
 }
 
-export function computeThreatLevel(elapsedSurvivalMs: number): {
+export interface ThreatProfile {
   readonly level: number;
-  readonly spawnIntervalMs: number;
+  readonly bulletSpeed: number;
+  readonly bulletsPerStream: number;
+  readonly streamCount: number;
+  readonly bulletIntervalMs: number;
   readonly laserCount: number;
+  readonly laserIntervalMs: number;
   readonly bombCount: number;
-  readonly speedScale: number;
-} {
+  readonly bombIntervalMs: number;
+}
+
+export function computeThreatLevel(elapsedSurvivalMs: number): ThreatProfile {
   const safeMs = Math.max(0, elapsedSurvivalMs);
   const level = Math.floor(safeMs / 15_000);
   const progress = Math.min(1, safeMs / 120_000);
-  const spawnIntervalMs = Math.round(2600 - (2600 - 950) * progress);
-  const laserCount = Math.min(5, 2 + Math.floor(level / 2));
-  const bombCount = Math.min(5, 2 + Math.floor((level + 1) / 2));
-  const speedScale = 1 + 0.65 * progress;
 
   return {
     level,
-    spawnIntervalMs,
-    laserCount,
-    bombCount,
-    speedScale,
+    // Bullet speed is kept slow and strictly constant; difficulty scales bullet quantity & spawn frequency
+    bulletSpeed: CONSTANT_BULLET_SPEED,
+    bulletsPerStream: 5 + Math.min(10, Math.floor(level * 1.4)),
+    streamCount: level >= 3 ? 2 : 1,
+    bulletIntervalMs: Math.round(920 - (920 - 420) * progress),
+    laserCount: Math.min(5, 2 + Math.floor(level / 2)),
+    laserIntervalMs: Math.round(2100 - (2100 - 920) * progress),
+    bombCount: Math.min(5, 2 + Math.floor((level + 1) / 2)),
+    bombIntervalMs: Math.round(1850 - (1850 - 780) * progress),
   };
 }
 
@@ -129,122 +138,123 @@ function createLaserThroughPoint(
   };
 }
 
-function createBulletBurst(
+export function spawnBulletStream(
+  threat: ThreatProfile,
+  playerPos: { readonly x: number; readonly y: number },
   idPrefix: string,
-  startX: number,
-  startY: number,
-  targetX: number,
-  targetY: number,
-  count: number,
-  baseSpeed: number
-): BulletHazard[] {
-  const baseAngle = Math.atan2(targetY - startY, targetX - startX);
+  rng: () => number
+): readonly BulletHazard[] {
+  const arenaTop = HUD_HEIGHT + 30;
+  const arenaBottom = LOGICAL_HEIGHT - 30;
   const bullets: BulletHazard[] = [];
-  for (let i = 0; i < count; i++) {
-    const spread = (i - (count - 1) / 2) * 0.055;
-    const speed = baseSpeed + i * 16;
-    const vx = Math.cos(baseAngle + spread) * speed;
-    const vy = Math.sin(baseAngle + spread) * speed;
-    bullets.push({
-      id: `${idPrefix}-b-${i}`,
-      kind: 'BULLET',
-      x: startX - Math.cos(baseAngle) * i * 14,
-      y: startY - Math.sin(baseAngle) * i * 14,
-      vx,
-      vy,
-      radius: 4.0,
-      grazeTimerMs: 0,
-    });
+
+  for (let s = 0; s < threat.streamCount; s++) {
+    const edgeChoice = rng();
+    let startX = 0;
+    let startY = 0;
+    if (edgeChoice < 0.45) {
+      startX = 16 + rng() * (LOGICAL_WIDTH - 32);
+      startY = HUD_HEIGHT - 8;
+    } else if (edgeChoice < 0.72) {
+      startX = -8;
+      startY = arenaTop + rng() * (arenaBottom - arenaTop);
+    } else if (edgeChoice < 0.92) {
+      startX = LOGICAL_WIDTH + 8;
+      startY = arenaTop + rng() * (arenaBottom - arenaTop);
+    } else {
+      startX = 16 + rng() * (LOGICAL_WIDTH - 32);
+      startY = LOGICAL_HEIGHT + 8;
+    }
+
+    const targetX = playerPos.x + (rng() - 0.5) * 90;
+    const targetY = playerPos.y + (rng() - 0.5) * 90;
+    const baseAngle = Math.atan2(targetY - startY, targetX - startX);
+    const dirX = Math.cos(baseAngle);
+    const dirY = Math.sin(baseAngle);
+
+    // Every bullet in the stream moves at the exact same slow constant speed, spaced tightly along the chord
+    for (let i = 0; i < threat.bulletsPerStream; i++) {
+      const spread = (i - (threat.bulletsPerStream - 1) / 2) * 0.032;
+      const vx = Math.cos(baseAngle + spread) * threat.bulletSpeed;
+      const vy = Math.sin(baseAngle + spread) * threat.bulletSpeed;
+      bullets.push({
+        id: `${idPrefix}-b-${s}-${i}`,
+        kind: 'BULLET',
+        x: startX - dirX * i * 13,
+        y: startY - dirY * i * 13,
+        vx,
+        vy,
+        radius: 4.0,
+        grazeTimerMs: 0,
+      });
+    }
   }
+
   return bullets;
 }
 
-export function spawnTacticalPattern(
-  threatLevel: ReturnType<typeof computeThreatLevel>,
-  playerPos: { readonly x: number; readonly y: number },
-  nextIdPrefix: string,
+export function spawnLaserFormation(
+  threat: ThreatProfile,
+  idPrefix: string,
   rng: () => number
-): {
-  readonly hazards: readonly Hazard[];
-  readonly cutInText: string;
-} {
-  const hazards: Hazard[] = [];
-  const patternIndex = Math.floor(rng() * 3);
-
-  // Pick a focal sweet-spot inside the arena away from the immediate player position
+): readonly LaserHazard[] {
   const arenaTop = HUD_HEIGHT + 64;
   const arenaBottom = LOGICAL_HEIGHT - 64;
   const focusX = 56 + rng() * (LOGICAL_WIDTH - 112);
   const focusY = arenaTop + rng() * (arenaBottom - arenaTop);
-
-  // 1. Intersecting Lasers (form high-return sweet spot near focusX, focusY)
   const baseAngle = rng() * Math.PI;
-  for (let i = 0; i < threatLevel.laserCount; i++) {
-    const angle = baseAngle + (i * Math.PI) / threatLevel.laserCount + (rng() - 0.5) * 0.22;
-    const offset = (i - (threatLevel.laserCount - 1) / 2) * 14;
-    const lx = Math.max(40, Math.min(LOGICAL_WIDTH - 40, focusX + Math.cos(angle + Math.PI / 2) * offset));
-    const ly = Math.max(arenaTop, Math.min(arenaBottom, focusY + Math.sin(angle + Math.PI / 2) * offset));
-    hazards.push(
-      createLaserThroughPoint(`${nextIdPrefix}-laser-${i}`, lx, ly, angle, 5.5 + (i % 2))
+  const lasers: LaserHazard[] = [];
+
+  for (let i = 0; i < threat.laserCount; i++) {
+    const angle = baseAngle + (i * Math.PI) / threat.laserCount + (rng() - 0.5) * 0.22;
+    const offset = (i - (threat.laserCount - 1) / 2) * 14;
+    const lx = Math.max(
+      40,
+      Math.min(LOGICAL_WIDTH - 40, focusX + Math.cos(angle + Math.PI / 2) * offset)
     );
+    const ly = Math.max(
+      arenaTop,
+      Math.min(arenaBottom, focusY + Math.sin(angle + Math.PI / 2) * offset)
+    );
+    lasers.push(createLaserThroughPoint(`${idPrefix}-l-${i}`, lx, ly, angle, 5.5 + (i % 2)));
   }
 
-  // 2. Bombing Lock-Ons (deny corner camping & contest route)
-  const bombCount = patternIndex === 1 ? threatLevel.bombCount + 1 : threatLevel.bombCount;
-  for (let i = 0; i < bombCount; i++) {
-    // First bomb biases toward player's current position to force movement; others scatter
+  return lasers;
+}
+
+export function spawnBombCluster(
+  threat: ThreatProfile,
+  playerPos: { readonly x: number; readonly y: number },
+  idPrefix: string,
+  rng: () => number
+): readonly BombHazard[] {
+  const arenaTop = HUD_HEIGHT + 54;
+  const arenaBottom = LOGICAL_HEIGHT - 54;
+  const bombs: BombHazard[] = [];
+
+  for (let i = 0; i < threat.bombCount; i++) {
     const bx =
       i === 0
-        ? Math.max(44, Math.min(LOGICAL_WIDTH - 44, playerPos.x + (rng() - 0.5) * 48))
+        ? Math.max(44, Math.min(LOGICAL_WIDTH - 44, playerPos.x + (rng() - 0.5) * 56))
         : 44 + rng() * (LOGICAL_WIDTH - 88);
     const by =
       i === 0
-        ? Math.max(arenaTop, Math.min(arenaBottom, playerPos.y + (rng() - 0.5) * 48))
+        ? Math.max(arenaTop, Math.min(arenaBottom, playerPos.y + (rng() - 0.5) * 56))
         : arenaTop + rng() * (arenaBottom - arenaTop);
     const blastRadius = 30 + Math.round(rng() * 22);
-    hazards.push({
-      id: `${nextIdPrefix}-bomb-${i}`,
+    bombs.push({
+      id: `${idPrefix}-bm-${i}`,
       kind: 'BOMB',
       x: bx,
       y: by,
       blastRadius,
       elapsedMs: -i * 90,
-      convergeDurationMs: 350 + i * 90,
+      convergeDurationMs: 350,
       holdDurationMs: 550,
       activeDurationMs: 450,
       grazeTimerMs: 0,
     });
   }
 
-  // 3. Machine-Gun Bullet Streams (contest travel corridor and bridge combo gauge)
-  const streamCount = patternIndex === 2 ? 2 : 1;
-  for (let s = 0; s < streamCount; s++) {
-    const fromTop = rng() < 0.55;
-    const startX = fromTop ? rng() * LOGICAL_WIDTH : rng() < 0.5 ? -10 : LOGICAL_WIDTH + 10;
-    const startY = fromTop ? HUD_HEIGHT - 10 : arenaTop + rng() * (arenaBottom - arenaTop);
-    const targetX = (playerPos.x + focusX) * 0.5 + (rng() - 0.5) * 40;
-    const targetY = (playerPos.y + focusY) * 0.5 + (rng() - 0.5) * 40;
-    const burst = createBulletBurst(
-      `${nextIdPrefix}-stream-${s}`,
-      startX,
-      startY,
-      targetX,
-      targetY,
-      6 + Math.min(6, threatLevel.level),
-      185 * threatLevel.speedScale
-    );
-    hazards.push(...burst);
-  }
-
-  const cutInText =
-    patternIndex === 0
-      ? '高エネルギー反応'
-      : patternIndex === 1
-        ? '爆撃圏ロックオン'
-        : '多重弾幕接近';
-
-  return {
-    hazards,
-    cutInText,
-  };
+  return bombs;
 }

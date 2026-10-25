@@ -3,6 +3,7 @@ import {
   resetPlayerCenter,
   startNewGame,
   stepGame,
+  togglePauseGame,
 } from './core/game';
 import { computeGyroDelta, computeSwipeDelta, type MotionSample } from './core/input';
 import type { ControlOptions, GameState, RankingRecord } from './core/types';
@@ -28,12 +29,16 @@ handleUrlResetParam();
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const titleOverlay = document.getElementById('title-overlay') as HTMLElement;
+const pauseOverlay = document.getElementById('pause-overlay') as HTMLElement;
 const resultOverlay = document.getElementById('result-overlay') as HTMLElement;
 const titleBest = document.getElementById('title-best') as HTMLElement;
 const resultBanner = document.getElementById('result-banner') as HTMLElement;
 const resultCardPreview = document.getElementById('result-card-preview') as HTMLImageElement;
 const rankingList = document.getElementById('ranking-list') as HTMLOListElement;
 
+const btnPause = document.getElementById('btn-pause') as HTMLButtonElement;
+const btnResume = document.getElementById('btn-resume') as HTMLButtonElement;
+const btnQuit = document.getElementById('btn-quit') as HTMLButtonElement;
 const btnStart = document.getElementById('btn-start') as HTMLButtonElement;
 const btnShare = document.getElementById('btn-share') as HTMLButtonElement;
 const btnRetry = document.getElementById('btn-retry') as HTMLButtonElement;
@@ -63,7 +68,6 @@ let state: GameState = createInitialGameState();
 let latestResultCanvas: HTMLCanvasElement | null = null;
 let latestShareText = '';
 
-// Pointer & Gyro accumulators
 let activePointerId: number | null = null;
 let lastPointerX = 0;
 let lastPointerY = 0;
@@ -104,7 +108,7 @@ function updateTitleBest(): void {
 
 function renderRankingList(rankings: readonly RankingRecord[], highlightIdx: number): void {
   rankingList.innerHTML = '';
-  rankings.slice(0, 5).forEach((rec, idx) => {
+  rankings.forEach((rec, idx) => {
     const li = document.createElement('li');
     li.className = `ranking-item${idx === highlightIdx ? ' highlight' : ''}`;
     const left = document.createElement('span');
@@ -170,6 +174,59 @@ btnSound.addEventListener('click', () => {
   updateOptions({ soundEnabled: !options.soundEnabled });
 });
 
+function syncPauseUI(): void {
+  const isPlaying = state.phase === 'PLAYING';
+  const isPaused = state.phase === 'PAUSED';
+  document.body.classList.toggle('playing', isPlaying);
+  btnPause.classList.toggle('hidden', !isPlaying && !isPaused);
+  btnPause.textContent = isPaused ? 'RESUME' : 'PAUSE';
+  pauseOverlay.classList.toggle('active', isPaused);
+  if (isPaused) {
+    sound.stopBgm();
+  } else if (isPlaying) {
+    sound.startBgm();
+  }
+  window.setTimeout(() => renderer.resize(), 0);
+}
+
+function handleTogglePause(): void {
+  if (state.phase !== 'PLAYING' && state.phase !== 'PAUSED') return;
+  state = togglePauseGame(state);
+  pendingRawDx = 0;
+  pendingRawDy = 0;
+  pendingGyroDx = 0;
+  pendingGyroDy = 0;
+  syncPauseUI();
+}
+
+btnPause.addEventListener('click', () => {
+  handleTogglePause();
+});
+
+btnResume.addEventListener('click', () => {
+  if (state.phase === 'PAUSED') {
+    handleTogglePause();
+  }
+});
+
+btnQuit.addEventListener('click', () => {
+  sound.stopBgm();
+  state = createInitialGameState();
+  document.body.classList.remove('playing');
+  btnPause.classList.add('hidden');
+  pauseOverlay.classList.remove('active');
+  resultOverlay.classList.remove('active');
+  titleOverlay.classList.add('active');
+  updateTitleBest();
+  window.setTimeout(() => renderer.resize(), 0);
+});
+
+window.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+    handleTogglePause();
+  }
+});
+
 async function handleStartGame(): Promise<void> {
   if (options.mode === 'GYRO') {
     await requestSensorPermissions(
@@ -183,9 +240,13 @@ async function handleStartGame(): Promise<void> {
   }
   state = startNewGame(state);
   document.body.classList.add('playing');
+  btnPause.classList.remove('hidden');
+  btnPause.textContent = 'PAUSE';
   titleOverlay.classList.remove('active');
+  pauseOverlay.classList.remove('active');
   resultOverlay.classList.remove('active');
   sound.startBgm();
+  window.setTimeout(() => renderer.resize(), 0);
 }
 
 btnStart.addEventListener('click', () => {
@@ -202,7 +263,6 @@ btnShare.addEventListener('click', () => {
   }
 });
 
-// Relative Touch / Mouse Trackpad handlers
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return Boolean(target.closest('button, input, label, a, .options-panel'));
@@ -236,7 +296,6 @@ function clearPointer(e: PointerEvent): void {
 window.addEventListener('pointerup', clearPointer);
 window.addEventListener('pointercancel', clearPointer);
 
-// DeviceMotion 3D Gyro handler
 window.addEventListener('devicemotion', (e: DeviceMotionEvent) => {
   if (options.mode !== 'GYRO') return;
   const now = performance.now();
@@ -303,6 +362,8 @@ function onFrame(now: number): void {
   if (prevPhase === 'PLAYING' && state.phase === 'RESULT') {
     sound.stopBgm();
     document.body.classList.remove('playing');
+    btnPause.classList.add('hidden');
+    pauseOverlay.classList.remove('active');
     const record: RankingRecord = {
       score: state.score,
       survivalTimeMs: state.survivalTimeMs,

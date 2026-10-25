@@ -3,7 +3,9 @@ import {
   computeThreatLevel,
   getBombPhase,
   getLaserPhase,
-  spawnTacticalPattern,
+  spawnBombCluster,
+  spawnBulletStream,
+  spawnLaserFormation,
   stepHazards,
 } from './hazards';
 import { clampPlayerPosition } from './input';
@@ -18,11 +20,11 @@ import {
   type CutInEffect,
   type GamePhase,
   type GameState,
-  type GrazeSample,
   type Hazard,
+  type PeakMomentSnapshot,
   type ScorePopup,
+  type ScoreSample,
   type SparkParticle,
-  type Vector2D,
 } from './types';
 
 export interface StepEvents {
@@ -39,6 +41,7 @@ export interface StepEvents {
 const DEFAULT_CENTER_X = LOGICAL_WIDTH / 2;
 const DEFAULT_CENTER_Y = HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * 0.6;
 const MAX_STEP_DT_MS = 50;
+const PEAK_WINDOW_MS = 500;
 
 export function createInitialGameState(): GameState {
   return {
@@ -60,12 +63,14 @@ export function createInitialGameState(): GameState {
     totalGrazeCount: 0,
     lives: INITIAL_LIVES,
     survivalTimeMs: 0,
-    nextWaveInMs: 400,
-    waveCounter: 0,
+    nextBulletInMs: 150,
+    nextLaserInMs: 650,
+    nextBombInMs: 1100,
+    spawnCounter: 0,
     screenShakeMs: 0,
     hitFlashMs: 0,
-    traceLog: [{ x: DEFAULT_CENTER_X, y: DEFAULT_CENTER_Y }],
-    grazeLog: [],
+    recentScoreSamples: [],
+    peakMoment: null,
   };
 }
 
@@ -87,8 +92,17 @@ export function startNewGame(prev: GameState): GameState {
       remainingMs: 900,
       totalMs: 900,
     },
-    traceLog: [startPos],
   };
+}
+
+export function togglePauseGame(state: GameState): GameState {
+  if (state.phase === 'PLAYING') {
+    return { ...state, phase: 'PAUSED' };
+  }
+  if (state.phase === 'PAUSED') {
+    return { ...state, phase: 'PLAYING' };
+  }
+  return state;
 }
 
 export function resetPlayerCenter(state: GameState): GameState {
@@ -154,14 +168,6 @@ export function stepGame(
   moveDelta: { readonly dx: number; readonly dy: number },
   rng: () => number = Math.random
 ): { readonly state: GameState; readonly events: StepEvents } {
-  const dtMs = Math.max(0, Math.min(MAX_STEP_DT_MS, rawDtMs));
-  const clampedPos = clampPlayerPosition(
-    state.player.x + moveDelta.dx,
-    state.player.y + moveDelta.dy
-  );
-
-  const nextTrail = [clampedPos, ...state.player.trail.slice(0, 11)];
-
   const emptyEvents: StepEvents = {
     grazeCount: 0,
     criticalGrazeCount: 0,
@@ -172,6 +178,18 @@ export function stepGame(
     bombDetonatedCount: 0,
     laserActivatedCount: 0,
   };
+
+  if (state.phase === 'PAUSED') {
+    return { state, events: emptyEvents };
+  }
+
+  const dtMs = Math.max(0, Math.min(MAX_STEP_DT_MS, rawDtMs));
+  const clampedPos = clampPlayerPosition(
+    state.player.x + moveDelta.dx,
+    state.player.y + moveDelta.dy
+  );
+
+  const nextTrail = [clampedPos, ...state.player.trail.slice(0, 11)];
 
   if (state.phase !== 'PLAYING') {
     const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
@@ -197,7 +215,6 @@ export function stepGame(
   const survivalTimeMs = state.survivalTimeMs + dtMs;
   const invulnerableMs = Math.max(0, state.player.invulnerableMs - dtMs);
 
-  // Detect bomb detonations and laser activations across this step
   let bombDetonatedCount = 0;
   let laserActivatedCount = 0;
   for (const h of state.hazards) {
@@ -220,40 +237,56 @@ export function stepGame(
   const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
   let cutIn: CutInEffect | null = fx.cutIn;
 
-  // Wave spawning
-  let nextWaveInMs = state.nextWaveInMs - dtMs;
-  let waveCounter = state.waveCounter;
+  // Independent continuous spawners for Bullet Streams, Lasers, and Bombs
+  const threat = computeThreatLevel(survivalTimeMs);
+  let nextBulletInMs = state.nextBulletInMs - dtMs;
+  let nextLaserInMs = state.nextLaserInMs - dtMs;
+  let nextBombInMs = state.nextBombInMs - dtMs;
+  let spawnCounter = state.spawnCounter;
   let spawnedLaserCount = 0;
   let spawnedBombCount = 0;
 
-  if (nextWaveInMs <= 0) {
-    const threat = computeThreatLevel(survivalTimeMs);
-    waveCounter += 1;
-    const spawned = spawnTacticalPattern(threat, clampedPos, `w${waveCounter}`, rng);
-    hazards.push(...spawned.hazards);
-    spawnedLaserCount = spawned.hazards.filter((h) => h.kind === 'LASER').length;
-    spawnedBombCount = spawned.hazards.filter((h) => h.kind === 'BOMB').length;
-    nextWaveInMs = threat.spawnIntervalMs;
+  if (nextBulletInMs <= 0) {
+    spawnCounter += 1;
+    const bullets = spawnBulletStream(threat, clampedPos, `s${spawnCounter}`, rng);
+    hazards.push(...bullets);
+    nextBulletInMs = threat.bulletIntervalMs;
+  }
 
+  if (nextLaserInMs <= 0) {
+    spawnCounter += 1;
+    const lasers = spawnLaserFormation(threat, `s${spawnCounter}`, rng);
+    hazards.push(...lasers);
+    spawnedLaserCount = lasers.length;
+    nextLaserInMs = threat.laserIntervalMs;
     if (!cutIn) {
       cutIn = {
-        topText: spawned.cutInText,
-        bottomText: `THREAT LV.${threat.level + 1}`,
+        topText: '高エネルギー反応',
+        bottomText: `LASER INTERSECTION`,
         color: '#ff4400',
-        remainingMs: 750,
-        totalMs: 750,
+        remainingMs: 650,
+        totalMs: 650,
       };
     }
   }
 
-  // Record trace log every ~100ms or significant move
-  const lastTrace = state.traceLog[state.traceLog.length - 1];
-  const traceLog: Vector2D[] =
-    !lastTrace || Math.hypot(clampedPos.x - lastTrace.x, clampedPos.y - lastTrace.y) >= 5
-      ? [...state.traceLog.slice(-240), clampedPos]
-      : [...state.traceLog];
+  if (nextBombInMs <= 0) {
+    spawnCounter += 1;
+    const bombs = spawnBombCluster(threat, clampedPos, `s${spawnCounter}`, rng);
+    hazards.push(...bombs);
+    spawnedBombCount = bombs.length;
+    nextBombInMs = threat.bombIntervalMs;
+    if (!cutIn) {
+      cutIn = {
+        topText: '爆撃圏ロックオン',
+        bottomText: `BOMBING LOCK-ON`,
+        color: '#ff8800',
+        remainingMs: 620,
+        totalMs: 620,
+      };
+    }
+  }
 
-  // Evaluate contacts when not invulnerable
   let score = state.score;
   let comboMultiplier = state.comboMultiplier;
   let maxCombo = state.maxCombo;
@@ -269,7 +302,7 @@ export function stepGame(
   let criticalGrazeCount = 0;
   let directHit = false;
   let gameOver = false;
-  const grazeLog: GrazeSample[] = [...state.grazeLog];
+  let frameScoreGain = 0;
 
   if (invulnerableMs === 0) {
     const contacts = hazards.map((hazard) => ({
@@ -277,7 +310,6 @@ export function stepGame(
       contact: evaluateHazardContact(clampedPos.x, clampedPos.y, hazard),
     }));
 
-    // Precedence Rule: Direct Hit takes absolute priority over simultaneous Graze on the same frame
     const hasDirectHit = contacts.some((c) => c.contact.kind === 'HIT');
 
     if (hasDirectHit) {
@@ -288,6 +320,7 @@ export function stepGame(
       nextInvulnerableMs = INVULNERABLE_MS;
       screenShakeMs = 420;
       hitFlashMs = 360;
+      hazards = hazards.map((h) => (h.grazeTimerMs !== 0 ? { ...h, grazeTimerMs: 0 } : h));
 
       if (lives === 0) {
         gameOver = true;
@@ -309,7 +342,6 @@ export function stepGame(
         };
       }
     } else {
-      // Process continuous graze ticks for all hazards in GRAZE ring
       const updatedHazards: Hazard[] = [];
       let activeGrazeSources = 0;
 
@@ -321,6 +353,7 @@ export function stepGame(
             timer -= GRAZE_TICK_MS;
             const reward = computeGrazeTickReward(contact.closeness, comboMultiplier);
             score += reward.scoreDelta;
+            frameScoreGain += reward.scoreDelta;
             comboMultiplier = Math.min(999.9, +(comboMultiplier + reward.comboDelta).toFixed(2));
             maxCombo = Math.max(maxCombo, comboMultiplier);
             comboGauge = 1.0;
@@ -330,15 +363,6 @@ export function stepGame(
               criticalGrazeCount += 1;
             }
 
-            if (grazeLog.length < 300) {
-              grazeLog.push({
-                x: clampedPos.x,
-                y: clampedPos.y,
-                isCritical: reward.isCritical,
-              });
-            }
-
-            // Spawn sparks
             const sparkBursts = reward.isCritical ? 4 : 2;
             for (let s = 0; s < sparkBursts; s++) {
               const angle = rng() * Math.PI * 2;
@@ -354,7 +378,6 @@ export function stepGame(
               });
             }
 
-            // Spawn score popup
             if (fx.popups.length < 24) {
               fx.popups.push({
                 x: clampedPos.x + (rng() - 0.5) * 32,
@@ -390,7 +413,41 @@ export function stepGame(
     }
   }
 
-  // Combo decay when no graze tick occurred on this frame and no direct hit just reset it
+  // Rolling 500ms score-rate window & Peak Moment Snapshot capture
+  const cutoffMs = survivalTimeMs - PEAK_WINDOW_MS;
+  const recentScoreSamples: ScoreSample[] = state.recentScoreSamples.filter(
+    (s) => s.timeMs > cutoffMs
+  );
+  if (frameScoreGain > 0) {
+    recentScoreSamples.push({ timeMs: survivalTimeMs, scoreDelta: frameScoreGain });
+  }
+  const windowTotalScore = recentScoreSamples.reduce((sum, s) => sum + s.scoreDelta, 0);
+  const windowScoreRatePerSec = Math.round(windowTotalScore * (1000 / PEAK_WINDOW_MS));
+
+  const nextSparks = fx.sparks.slice(-90);
+  const nextPlayer = {
+    x: clampedPos.x,
+    y: clampedPos.y,
+    invulnerableMs: nextInvulnerableMs,
+    trail: nextTrail,
+  };
+
+  let peakMoment: PeakMomentSnapshot | null = state.peakMoment;
+  if (
+    frameScoreGain > 0 &&
+    (!peakMoment || windowScoreRatePerSec >= peakMoment.windowScoreRatePerSec)
+  ) {
+    peakMoment = {
+      timeMs: survivalTimeMs,
+      windowScoreRatePerSec,
+      comboMultiplier,
+      player: nextPlayer,
+      hazards,
+      sparks: nextSparks,
+      popups: fx.popups,
+    };
+  }
+
   if (!directHit && grazeCount === 0) {
     if (comboGauge > 0) {
       comboGauge = Math.max(0, comboGauge - dtMs / COMBO_HOLD_MS);
@@ -404,14 +461,9 @@ export function stepGame(
   return {
     state: {
       phase,
-      player: {
-        x: clampedPos.x,
-        y: clampedPos.y,
-        invulnerableMs: nextInvulnerableMs,
-        trail: nextTrail,
-      },
+      player: nextPlayer,
       hazards,
-      sparks: fx.sparks.slice(-90),
+      sparks: nextSparks,
       popups: fx.popups,
       cutIn,
       score,
@@ -421,12 +473,14 @@ export function stepGame(
       totalGrazeCount,
       lives,
       survivalTimeMs,
-      nextWaveInMs,
-      waveCounter,
+      nextBulletInMs,
+      nextLaserInMs,
+      nextBombInMs,
+      spawnCounter,
       screenShakeMs,
       hitFlashMs,
-      traceLog,
-      grazeLog,
+      recentScoreSamples,
+      peakMoment,
     },
     events: {
       grazeCount,

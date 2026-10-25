@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   computeThreatLevel,
   getBombPhase,
-  spawnTacticalPattern,
+  spawnBulletStream,
+  spawnBombCluster,
+  spawnLaserFormation,
   stepHazards,
 } from '../../src/core/hazards';
 import type { BombHazard } from '../../src/core/types';
 
-describe('hazards lifecycle and wave director', () => {
+describe('hazards lifecycle and continuous spawners', () => {
   it('progresses bomb through single CONVERGING -> HOLD -> ACTIVE -> EXPIRED lifecycle', () => {
     const bomb: BombHazard = {
       id: 'b1',
@@ -42,30 +44,46 @@ describe('hazards lifecycle and wave director', () => {
     expect(expired.phase).toBe('EXPIRED');
   });
 
-  it('scales threat level every 15 seconds, shortening spawn intervals and adding hazards', () => {
+  it('keeps bullet speed slow and constant across threat levels while increasing bullet count and shortening intervals', () => {
     const t0 = computeThreatLevel(0);
-    const t60 = computeThreatLevel(60_000);
     const t120 = computeThreatLevel(120_000);
 
-    expect(t0.spawnIntervalMs).toBeCloseTo(2600, 1);
-    expect(t60.spawnIntervalMs).toBeLessThan(t0.spawnIntervalMs);
-    expect(t120.spawnIntervalMs).toBeCloseTo(950, 1);
-    expect(t120.laserCount).toBeGreaterThan(t0.laserCount);
-    expect(t120.bombCount).toBeGreaterThan(t0.bombCount);
+    expect(t0.bulletSpeed).toBe(t120.bulletSpeed);
+    expect(t0.bulletSpeed).toBeLessThanOrEqual(110);
+    expect(t120.bulletsPerStream).toBeGreaterThan(t0.bulletsPerStream);
+    expect(t120.bulletIntervalMs).toBeLessThan(t0.bulletIntervalMs);
+    expect(t120.laserIntervalMs).toBeLessThan(t0.laserIntervalMs);
+    expect(t120.bombIntervalMs).toBeLessThan(t0.bombIntervalMs);
+
+    let seed = 0.3;
+    const rng = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+
+    const stream0 = spawnBulletStream(t0, { x: 180, y: 340 }, 's0', rng);
+    const stream120 = spawnBulletStream(t120, { x: 180, y: 340 }, 's120', rng);
+
+    expect(stream120.length).toBeGreaterThan(stream0.length);
+    const speed0 = Math.hypot(stream0[0].vx, stream0[0].vy);
+    const speed120 = Math.hypot(stream120[0].vx, stream120[0].vy);
+    expect(speed0).toBeCloseTo(speed120, 4);
+    expect(speed0).toBeLessThanOrEqual(115);
   });
 
-  it('spawns intersecting laser + bullet/bomb tactical patterns and removes expired/offscreen hazards', () => {
+  it('spawns continuous laser formations and bomb clusters and removes expired hazards', () => {
     const threat = computeThreatLevel(30_000);
     let seed = 0.25;
     const rng = () => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
-    const pattern = spawnTacticalPattern(threat, { x: 180, y: 340 }, 'w1', rng);
-    expect(pattern.hazards.length).toBeGreaterThanOrEqual(4);
-    expect(pattern.hazards.some((h) => h.kind === 'LASER')).toBe(true);
+    const lasers = spawnLaserFormation(threat, 'l', rng);
+    const bombs = spawnBombCluster(threat, { x: 180, y: 340 }, 'b', rng);
+    expect(lasers.length).toBeGreaterThanOrEqual(2);
+    expect(bombs.length).toBeGreaterThanOrEqual(1);
 
-    const stepped = stepHazards(pattern.hazards, 4000);
+    const stepped = stepHazards([...lasers, ...bombs], 4000);
     expect(stepped.length).toBe(0);
   });
 });

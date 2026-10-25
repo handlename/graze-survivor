@@ -1,14 +1,233 @@
+import { getBombPhase, getLaserPhase } from '../core/hazards';
 import {
+  CORE_RADIUS,
+  GRAZE_RADIUS,
   HUD_HEIGHT,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
+  type BombHazard,
+  type BulletHazard,
   type GameState,
+  type LaserHazard,
+  type PeakMomentSnapshot,
   type RankingRecord,
 } from '../core/types';
 import { drawStretchedMincho } from './renderer';
 import { formatSurvivalTime } from './storage';
 
 export const PUBLIC_GAME_URL = 'https://handlename.github.io/dodge-survivor/';
+
+function renderPeakSnapshotCrop(
+  ctx: CanvasRenderingContext2D,
+  boxX: number,
+  boxY: number,
+  boxW: number,
+  boxH: number,
+  snapshot: PeakMomentSnapshot | null,
+  fallbackState: GameState
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(boxX, boxY, boxW, boxH);
+  ctx.clip();
+
+  ctx.fillStyle = '#06060b';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+
+  const player = snapshot ? snapshot.player : fallbackState.player;
+  const hazards = snapshot ? snapshot.hazards : fallbackState.hazards;
+  const sparks = snapshot ? snapshot.sparks : fallbackState.sparks;
+  const popups = snapshot ? snapshot.popups : fallbackState.popups;
+
+  // Crop a 180 x 260 logical window centered around the player at the peak moment
+  const cropW = 180;
+  const cropH = 260;
+  const minCenterX = cropW / 2;
+  const maxCenterX = LOGICAL_WIDTH - cropW / 2;
+  const minCenterY = HUD_HEIGHT + cropH / 2;
+  const maxCenterY = LOGICAL_HEIGHT - cropH / 2;
+
+  const camX = Math.max(minCenterX, Math.min(maxCenterX, player.x));
+  const camY = Math.max(minCenterY, Math.min(maxCenterY, player.y));
+
+  const scaleX = boxW / cropW;
+  const scaleY = boxH / cropH;
+
+  ctx.translate(boxX + boxW / 2, boxY + boxH / 2);
+  ctx.scale(scaleX, scaleY);
+  ctx.translate(-camX, -camY);
+
+  // Tactical grid inside snapshot
+  ctx.strokeStyle = 'rgba(255, 153, 0, 0.14)';
+  ctx.lineWidth = 0.75;
+  for (let x = 0; x <= LOGICAL_WIDTH; x += 36) {
+    ctx.beginPath();
+    ctx.moveTo(x, HUD_HEIGHT);
+    ctx.lineTo(x, LOGICAL_HEIGHT);
+    ctx.stroke();
+  }
+  for (let y = HUD_HEIGHT; y <= LOGICAL_HEIGHT; y += 36) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(LOGICAL_WIDTH, y);
+    ctx.stroke();
+  }
+
+  // Watermark cut-in in background of crop
+  drawStretchedMincho(
+    ctx,
+    '極限瞬間',
+    camX,
+    camY - 62,
+    34,
+    'rgba(255, 153, 0, 0.22)',
+    1.42
+  );
+
+  // Bombs
+  for (const h of hazards) {
+    if (h.kind === 'BOMB') {
+      const b = h as BombHazard;
+      if (b.elapsedMs < 0) continue;
+      const info = getBombPhase(b);
+      if (info.phase === 'CONVERGING') {
+        ctx.fillStyle = 'rgba(255, 60, 0, 0.08)';
+        ctx.strokeStyle = 'rgba(255, 190, 0, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, info.currentRingRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (info.phase === 'HOLD') {
+        ctx.fillStyle = 'rgba(255, 40, 0, 0.22)';
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (info.phase === 'ACTIVE') {
+        ctx.fillStyle = 'rgba(255, 80, 0, 0.72)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Lasers
+  for (const h of hazards) {
+    if (h.kind === 'LASER') {
+      const l = h as LaserHazard;
+      const phase = getLaserPhase(l);
+      if (phase === 'WARNING') {
+        ctx.save();
+        ctx.strokeStyle = '#ff0044';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (phase === 'ACTIVE') {
+        ctx.strokeStyle = 'rgba(255, 0, 85, 0.42)';
+        ctx.lineWidth = l.halfWidth * 3.2;
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+        ctx.lineWidth = l.halfWidth * 2;
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(2, l.halfWidth * 0.7);
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Bullets
+  for (const h of hazards) {
+    if (h.kind === 'BULLET') {
+      const b = h as BulletHazard;
+      ctx.fillStyle = '#ff5500';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.radius + 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffcc';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.radius * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Sparks & Popups
+  for (const s of sparks) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x - s.vx * 0.035, s.y - s.vy * 0.035);
+    ctx.stroke();
+  }
+  for (const p of popups) {
+    drawStretchedMincho(ctx, p.text, p.x, p.y, p.isCritical ? 12 : 10, p.color, 1.3);
+  }
+
+  // Player ship + Graze ring
+  ctx.strokeStyle = '#00ffee';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, GRAZE_RADIUS, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y - 10);
+  ctx.lineTo(player.x + 7, player.y + 7);
+  ctx.lineTo(player.x, player.y + 3.5);
+  ctx.lineTo(player.x - 7, player.y + 7);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.fillStyle = '#00ffee';
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, CORE_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // Snapshot overlay caption banner
+  ctx.fillStyle = 'rgba(9, 7, 6, 0.84)';
+  ctx.fillRect(boxX, boxY + boxH - 36, boxW, 36);
+  ctx.strokeStyle = '#ff9900';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  ctx.fillStyle = '#ffcc00';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'left';
+  const peakRate = snapshot ? snapshot.windowScoreRatePerSec : 0;
+  ctx.fillText(`PEAK: +${peakRate.toLocaleString('en-US')} PTS/s`, boxX + 8, boxY + boxH - 20);
+  ctx.fillStyle = '#00ffee';
+  ctx.font = '10px monospace';
+  const peakTime = snapshot ? formatSurvivalTime(snapshot.timeMs) : '00:00.000';
+  const peakCombo = snapshot ? snapshot.comboMultiplier.toFixed(1) : '1.0';
+  ctx.fillText(`AT ${peakTime} (×${peakCombo})`, boxX + 8, boxY + boxH - 6);
+}
 
 export function renderResultCardCanvas(
   state: GameState,
@@ -21,14 +240,13 @@ export function renderResultCardCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  // Background
   ctx.fillStyle = '#090706';
   ctx.fillRect(0, 0, 600, 400);
 
-  // Evangelion Hazard Stripe Borders (Top & Bottom)
+  // Evangelion Hazard Stripe Borders
   ctx.save();
   for (let x = -40; x < 640; x += 24) {
-    ctx.fillStyle = (Math.floor(x / 24) % 2 === 0) ? '#ff9900' : '#000000';
+    ctx.fillStyle = Math.floor(x / 24) % 2 === 0 ? '#ff9900' : '#000000';
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x + 14, 0);
@@ -55,7 +273,7 @@ export function renderResultCardCanvas(
   drawStretchedMincho(
     ctx,
     isNewRecord ? '最高記録更新・極限達成' : '作戦終了・戦果報告',
-    210,
+    200,
     54,
     24,
     isNewRecord ? '#ffcc00' : '#ff3300',
@@ -87,10 +305,10 @@ export function renderResultCardCanvas(
 
   ctx.fillStyle = '#ff9900';
   ctx.font = 'bold 12px monospace';
-  ctx.fillText('MAX COMBO', 210, 204);
+  ctx.fillText('MAX COMBO', 205, 204);
   ctx.fillStyle = '#ffcc00';
   ctx.font = 'bold 22px monospace';
-  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 210, 230);
+  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 205, 230);
 
   ctx.fillStyle = '#ff9900';
   ctx.font = 'bold 12px monospace';
@@ -102,41 +320,18 @@ export function renderResultCardCanvas(
 
   drawStretchedMincho(ctx, 'DODGE SURVIVOR', 28, 348, 20, '#ff9900', 1.3, 'left');
 
-  // Right Column: Mini Trace & Graze Heatmap (x: 396..576, y: 40..360)
-  const mapX = 402;
+  // Right Column: Peak Graze Moment Scene Cutout (x: 388..576, y: 50..356)
+  const mapX = 388;
   const mapY = 50;
-  const mapW = 172;
-  const mapH = 300;
-  ctx.fillStyle = '#05050a';
-  ctx.fillRect(mapX, mapY, mapW, mapH);
-  ctx.strokeStyle = '#ff9900';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(mapX, mapY, mapW, mapH);
+  const mapW = 188;
+  const mapH = 306;
 
   ctx.fillStyle = '#ff9900';
   ctx.font = 'bold 10px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('GRAZE & TRACE LOG', mapX + mapW / 2, mapY - 8);
+  ctx.fillText('PEAK GRAZE MOMENT', mapX + mapW / 2, mapY - 8);
 
-  const toMapX = (lx: number) => mapX + (lx / LOGICAL_WIDTH) * mapW;
-  const toMapY = (ly: number) =>
-    mapY + ((ly - HUD_HEIGHT) / (LOGICAL_HEIGHT - HUD_HEIGHT)) * mapH;
-
-  if (state.traceLog.length > 1) {
-    ctx.strokeStyle = 'rgba(0, 255, 238, 0.45)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(toMapX(state.traceLog[0].x), toMapY(state.traceLog[0].y));
-    for (let i = 1; i < state.traceLog.length; i++) {
-      ctx.lineTo(toMapX(state.traceLog[i].x), toMapY(state.traceLog[i].y));
-    }
-    ctx.stroke();
-  }
-
-  for (const g of state.grazeLog) {
-    ctx.fillStyle = g.isCritical ? '#ffcc00' : '#00ffee';
-    ctx.fillRect(toMapX(g.x) - 1.5, toMapY(g.y) - 1.5, 3, 3);
-  }
+  renderPeakSnapshotCrop(ctx, mapX, mapY, mapW, mapH, state.peakMoment, state);
 
   return canvas;
 }

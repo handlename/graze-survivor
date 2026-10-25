@@ -120,12 +120,21 @@ export interface RankingRecord {
   readonly timestamp: string;
 }
 
-export type GamePhase = 'TITLE' | 'PLAYING' | 'RESULT';
+export type GamePhase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'RESULT';
 
-export interface GrazeSample {
-  readonly x: number;
-  readonly y: number;
-  readonly isCritical: boolean;
+export interface ScoreSample {
+  readonly timeMs: number;
+  readonly scoreDelta: number;
+}
+
+export interface PeakMomentSnapshot {
+  readonly timeMs: number;
+  readonly windowScoreRatePerSec: number;
+  readonly comboMultiplier: number;
+  readonly player: PlayerState;
+  readonly hazards: readonly Hazard[];
+  readonly sparks: readonly SparkParticle[];
+  readonly popups: readonly ScorePopup[];
 }
 
 export interface GameState {
@@ -142,10 +151,12 @@ export interface GameState {
   readonly totalGrazeCount: number;
   readonly lives: number;
   readonly survivalTimeMs: number;
-  readonly nextWaveInMs: number;
-  readonly waveCounter: number;
+  readonly nextBulletInMs: number;
+  readonly nextLaserInMs: number;
+  readonly nextBombInMs: number;
+  readonly spawnCounter: number;
   readonly screenShakeMs: number;
   readonly hitFlashMs: number;
-  readonly traceLog: readonly Vector2D[];
-  readonly grazeLog: readonly GrazeSample[];
+  readonly recentScoreSamples: readonly ScoreSample[];
+  readonly peakMoment: PeakMomentSnapshot | null;
 }

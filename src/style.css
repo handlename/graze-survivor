@@ -53,6 +53,26 @@ body.playing .options-panel {
   display: block;
 }
 
+.pause-hud-btn {
+  position: absolute;
+  top: 52px;
+  right: 8px;
+  z-index: 10;
+  background: rgba(18, 12, 8, 0.85);
+  color: #ff9900;
+  border: 1px solid #ff9900;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+
+.pause-hud-btn.hidden {
+  display: none;
+}
+
 .overlay {
   position: absolute;
   inset: 56px 0 0 0;
