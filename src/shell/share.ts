@@ -11,10 +11,9 @@ import {
   type RankingRecord,
 } from '../core/types';
 import {
-  drawPersonaRansomBanner,
-  drawPersonaText,
-  drawStarSpark,
-  getActiveTheme,
+  drawCrossGrid,
+  MONO_FONT,
+  PALETTE,
   renderPlayerShipAndRing,
 } from './renderer';
 import { formatSurvivalTime } from './storage';
@@ -30,13 +29,12 @@ function renderPeakSnapshotCrop(
   snapshot: PeakMomentSnapshot | null,
   fallbackState: GameState
 ): void {
-  const theme = getActiveTheme();
   ctx.save();
   ctx.beginPath();
   ctx.rect(boxX, boxY, boxW, boxH);
   ctx.clip();
 
-  ctx.fillStyle = theme.bgBase;
+  ctx.fillStyle = PALETTE.bg;
   ctx.fillRect(boxX, boxY, boxW, boxH);
 
   const player = snapshot ? snapshot.player : fallbackState.player;
@@ -44,6 +42,7 @@ function renderPeakSnapshotCrop(
   const sparks = snapshot ? snapshot.sparks : fallbackState.sparks;
   const popups = snapshot ? snapshot.popups : fallbackState.popups;
   const combo = snapshot ? snapshot.comboMultiplier : fallbackState.maxCombo;
+  const animTimeMs = snapshot ? snapshot.timeMs : fallbackState.survivalTimeMs;
 
   const cropW = 180;
   const cropH = 260;
@@ -62,15 +61,7 @@ function renderPeakSnapshotCrop(
   ctx.scale(scaleX, scaleY);
   ctx.translate(-camX, -camY);
 
-  // Halftone background dots
-  ctx.fillStyle = theme.dotRgba;
-  for (let gx = 14; gx < LOGICAL_WIDTH; gx += 24) {
-    for (let gy = HUD_HEIGHT + 14; gy < LOGICAL_HEIGHT; gy += 24) {
-      ctx.beginPath();
-      ctx.arc(gx, gy, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  drawCrossGrid(ctx, LOGICAL_WIDTH, LOGICAL_HEIGHT, HUD_HEIGHT);
 
   for (const h of hazards) {
     if (h.kind === 'BOMB') {
@@ -78,31 +69,52 @@ function renderPeakSnapshotCrop(
       if (b.elapsedMs < 0) continue;
       const info = getBombPhase(b);
       if (info.phase === 'CONVERGING') {
-        ctx.fillStyle = 'rgba(255, 0, 68, 0.08)';
-        ctx.strokeStyle = theme.highlight;
-        ctx.lineWidth = 1.6;
+        ctx.fillStyle = PALETTE.dangerSoft;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.strokeStyle = PALETTE.danger;
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.strokeStyle = PALETTE.danger;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(b.x, b.y, info.currentRingRadius, 0, Math.PI * 2);
-        ctx.fill();
         ctx.stroke();
       } else if (info.phase === 'HOLD') {
-        ctx.fillStyle = 'rgba(255, 0, 68, 0.24)';
-        ctx.strokeStyle = theme.highlight;
-        ctx.lineWidth = 2;
+        ctx.fillStyle = PALETTE.dangerSoft;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.save();
+        ctx.strokeStyle = PALETTE.danger;
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
       } else if (info.phase === 'ACTIVE') {
-        ctx.fillStyle = theme.primary;
-        ctx.globalAlpha = 0.8;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.4;
+        ctx.fillStyle = PALETTE.danger;
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.stroke();
         ctx.globalAlpha = 1;
+
+        ctx.strokeStyle = PALETTE.fg;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
+        ctx.stroke();
       }
     }
   }
@@ -114,8 +126,8 @@ function renderPeakSnapshotCrop(
       const phase = getLaserPhase(l);
       if (phase === 'WARNING') {
         ctx.save();
-        ctx.strokeStyle = theme.primary;
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = PALETTE.danger;
+        ctx.lineWidth = 1.2;
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
@@ -123,24 +135,15 @@ function renderPeakSnapshotCrop(
         ctx.stroke();
         ctx.restore();
       } else if (phase === 'ACTIVE') {
-        ctx.strokeStyle = theme.primary;
-        ctx.globalAlpha = 0.5;
-        ctx.lineWidth = l.halfWidth * 3.2;
-        ctx.beginPath();
-        ctx.moveTo(l.x1, l.y1);
-        ctx.lineTo(l.x2, l.y2);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-
-        ctx.strokeStyle = theme.highlight;
+        ctx.strokeStyle = PALETTE.danger;
         ctx.lineWidth = l.halfWidth * 2;
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
         ctx.lineTo(l.x2, l.y2);
         ctx.stroke();
 
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(2, l.halfWidth * 0.7);
+        ctx.strokeStyle = PALETTE.bg;
+        ctx.lineWidth = Math.max(1.6, l.halfWidth * 0.45);
         ctx.beginPath();
         ctx.moveTo(l.x1, l.y1);
         ctx.lineTo(l.x2, l.y2);
@@ -152,64 +155,61 @@ function renderPeakSnapshotCrop(
   for (const h of hazards) {
     if (h.kind === 'BULLET') {
       const b = h as BulletHazard;
-      ctx.fillStyle = theme.primary;
+      ctx.fillStyle = PALETTE.danger;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.radius + 1.2, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, b.radius + 1.0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = theme.highlight;
+      ctx.fillStyle = PALETTE.bg;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.radius * 0.55, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, b.radius * 0.35, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  for (let i = 0; i < sparks.length; i++) {
-    const s = sparks[i];
-    if (i % 2 === 0) {
-      drawStarSpark(ctx, s.x, s.y, 5, theme.highlight, i * 0.6, 0.9);
-    } else {
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - s.vx * 0.035, s.y - s.vy * 0.035);
-      ctx.stroke();
-    }
+  for (const s of sparks) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x - s.vx * 0.035, s.y - s.vy * 0.035);
+    ctx.stroke();
   }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   for (const p of popups) {
-    drawPersonaText(
-      ctx,
-      p.text,
-      p.x,
-      p.y,
-      p.isCritical ? 12 : 10,
-      p.isCritical ? theme.highlight : theme.secondary,
-      -0.18,
-      'center',
-      3.2,
-      '#000000'
-    );
+    ctx.font = `700 ${p.isCritical ? 11 : 10}px ${MONO_FONT}`;
+    ctx.fillStyle = p.isCritical ? PALETTE.danger : PALETTE.fg;
+    ctx.fillText(p.text, p.x, p.y);
   }
 
-  renderPlayerShipAndRing(ctx, player.x, player.y, 3, combo, 1.0, 1000);
+  renderPlayerShipAndRing(ctx, player.x, player.y, 3, combo, 1.0, animTimeMs);
 
   ctx.restore();
 
-  ctx.fillStyle = 'rgba(6, 0, 14, 0.92)';
+  // Footer caption bar inside crop box
+  ctx.fillStyle = 'rgba(244, 244, 240, 0.94)';
   ctx.fillRect(boxX, boxY + boxH - 36, boxW, 36);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = PALETTE.fg;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(boxX, boxY + boxH - 36);
+  ctx.lineTo(boxX + boxW, boxY + boxH - 36);
+  ctx.stroke();
+
+  ctx.lineWidth = 1.5;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-  ctx.fillStyle = theme.highlight;
-  ctx.font = '900 11px monospace';
+  ctx.fillStyle = PALETTE.fg;
+  ctx.font = `700 11px ${MONO_FONT}`;
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
   const peakRate = snapshot ? snapshot.windowScoreRatePerSec : 0;
-  ctx.fillText(`PEAK: +${peakRate.toLocaleString('en-US')} PTS/s`, boxX + 8, boxY + boxH - 20);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 10px monospace';
+  ctx.fillText(`PEAK +${peakRate.toLocaleString('en-US')} PTS/s`, boxX + 8, boxY + boxH - 20);
+  ctx.fillStyle = PALETTE.fgMuted;
+  ctx.font = `600 10px ${MONO_FONT}`;
   const peakTime = snapshot ? formatSurvivalTime(snapshot.timeMs) : '00:00.000';
-  ctx.fillText(`AT ${peakTime} (×${combo.toFixed(1)})`, boxX + 8, boxY + boxH - 6);
+  ctx.fillText(`AT ${peakTime} (×${combo.toFixed(1)})`, boxX + 8, boxY + boxH - 7);
 }
 
 export function renderResultCardCanvas(
@@ -217,105 +217,93 @@ export function renderResultCardCanvas(
   record: RankingRecord,
   isNewRecord: boolean
 ): HTMLCanvasElement {
-  const theme = getActiveTheme();
   const canvas = document.createElement('canvas');
   canvas.width = 600;
   canvas.height = 400;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  // Vivid Persona Diagonal Split Backdrop
-  ctx.fillStyle = theme.bgBase;
+  // Flat Paper Background + Subtle Cross Grid
+  ctx.fillStyle = PALETTE.bg;
   ctx.fillRect(0, 0, 600, 400);
+  drawCrossGrid(ctx, 600, 400, 0);
 
-  ctx.fillStyle = theme.primary;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(390, 0);
-  ctx.lineTo(310, 400);
-  ctx.lineTo(0, 400);
-  ctx.closePath();
-  ctx.fill();
+  // Outer Frame
+  ctx.strokeStyle = PALETTE.fg;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, 580, 380);
 
-  ctx.fillStyle = '#090014';
-  ctx.beginPath();
-  ctx.moveTo(10, 12);
-  ctx.lineTo(372, 12);
-  ctx.lineTo(298, 388);
-  ctx.lineTo(10, 388);
-  ctx.closePath();
-  ctx.fill();
-
-  drawPersonaRansomBanner(
-    ctx,
-    isNewRecord ? 'NEW RECORD!!' : 'SHOWTIME REPORT',
-    190,
-    52,
-    22,
-    theme.primary,
-    1
-  );
-
-  ctx.fillStyle = theme.highlight;
-  ctx.font = '900 13px monospace';
+  // Header Badge
   ctx.textAlign = 'left';
-  ctx.fillText('FINAL SCORE', 28, 106);
+  ctx.textBaseline = 'alphabetic';
+  if (isNewRecord) {
+    ctx.fillStyle = PALETTE.danger;
+    ctx.fillRect(28, 28, 128, 24);
+    ctx.fillStyle = PALETTE.bg;
+    ctx.font = `700 12px ${MONO_FONT}`;
+    ctx.fillText('NEW HIGH SCORE', 38, 44);
+  } else {
+    ctx.strokeStyle = PALETTE.fg;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(28, 28, 116, 24);
+    ctx.fillStyle = PALETTE.fg;
+    ctx.font = `700 12px ${MONO_FONT}`;
+    ctx.fillText('RESULT REPORT', 38, 44);
+  }
 
-  drawPersonaText(
-    ctx,
-    record.score.toLocaleString('en-US'),
-    28,
-    148,
-    40,
-    '#ffffff',
-    -0.16,
-    'left',
-    4,
-    theme.primary
-  );
+  // Final Score
+  ctx.fillStyle = PALETTE.fgMuted;
+  ctx.font = `600 12px ${MONO_FONT}`;
+  ctx.fillText('FINAL SCORE', 28, 86);
 
-  ctx.fillStyle = theme.highlight;
-  ctx.font = '900 12px monospace';
-  ctx.fillText('SURVIVAL TIME', 28, 206);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '900 22px monospace';
-  ctx.fillText(formatSurvivalTime(record.survivalTimeMs), 28, 232);
+  ctx.fillStyle = PALETTE.fg;
+  ctx.font = `700 42px ${MONO_FONT}`;
+  ctx.fillText(record.score.toLocaleString('en-US'), 28, 132);
 
-  ctx.fillStyle = theme.highlight;
-  ctx.font = '900 12px monospace';
-  ctx.fillText('MAX COMBO', 205, 206);
-  ctx.fillStyle = theme.secondary;
-  ctx.font = '900 22px monospace';
-  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 205, 232);
+  // Divider line
+  ctx.strokeStyle = PALETTE.fgMuted;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(28, 152);
+  ctx.lineTo(356, 152);
+  ctx.stroke();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 274);
+  // Survival Time & Max Combo
+  ctx.fillStyle = PALETTE.fgMuted;
+  ctx.font = `600 11px ${MONO_FONT}`;
+  ctx.fillText('SURVIVAL TIME', 28, 182);
+  ctx.fillStyle = PALETTE.fg;
+  ctx.font = `700 22px ${MONO_FONT}`;
+  ctx.fillText(formatSurvivalTime(record.survivalTimeMs), 28, 210);
 
-  ctx.fillStyle = '#cccccc';
-  ctx.font = '12px monospace';
-  ctx.fillText(`TIMESTAMP: ${record.timestamp}`, 28, 304);
+  ctx.fillStyle = PALETTE.fgMuted;
+  ctx.font = `600 11px ${MONO_FONT}`;
+  ctx.fillText('MAX COMBO', 210, 182);
+  ctx.fillStyle = PALETTE.danger;
+  ctx.font = `700 22px ${MONO_FONT}`;
+  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 210, 210);
 
-  drawPersonaText(
-    ctx,
-    'GRAZE SURVIVOR',
-    28,
-    350,
-    22,
-    theme.highlight,
-    -0.18,
-    'left',
-    3,
-    '#000000'
-  );
+  // Graze Ticks & Timestamp
+  ctx.fillStyle = PALETTE.fg;
+  ctx.font = `600 12px ${MONO_FONT}`;
+  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 256);
 
-  const mapX = 388;
+  ctx.fillStyle = PALETTE.fgMuted;
+  ctx.font = `500 12px ${MONO_FONT}`;
+  ctx.fillText(`DATE: ${record.timestamp}`, 28, 282);
+
+  // Game Title Footer
+  ctx.fillStyle = PALETTE.fg;
+  ctx.font = `700 18px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif`;
+  ctx.fillText('GRAZE SURVIVOR', 28, 356);
+
+  const mapX = 382;
   const mapY = 48;
   const mapW = 190;
-  const mapH = 316;
+  const mapH = 322;
 
-  ctx.fillStyle = theme.highlight;
-  ctx.font = '900 11px monospace';
+  ctx.fillStyle = PALETTE.fg;
+  ctx.font = `700 11px ${MONO_FONT}`;
   ctx.textAlign = 'center';
   ctx.fillText('PEAK GRAZE MOMENT', mapX + mapW / 2, mapY - 10);
 
@@ -326,8 +314,8 @@ export function renderResultCardCanvas(
 
 export function buildShareMessage(record: RankingRecord, isNewRecord: boolean): string {
   const headline = isNewRecord
-    ? 'MAXIMUM GRAZE! NEW HIGH SCORE! ⚡🔥'
-    : 'SHOWTIME COMPLETE! ⚡🔥';
+    ? 'MAXIMUM GRAZE! NEW HIGH SCORE!'
+    : 'GRAZE SURVIVOR RESULT';
   return [
     headline,
     `SCORE: ${record.score.toLocaleString('en-US')} (MAX COMBO ×${record.maxCombo.toFixed(1)})`,

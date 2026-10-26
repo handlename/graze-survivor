@@ -93,14 +93,6 @@ export interface ScorePopup {
   readonly remainingMs: number;
 }
 
-export interface CutInEffect {
-  readonly topText: string;
-  readonly bottomText: string;
-  readonly color: string;
-  readonly remainingMs: number;
-  readonly totalMs: number;
-}
-
 export type InputMode = 'SWIPE' | 'GYRO';
 
 export interface ControlOptions {
@@ -144,7 +136,6 @@ export interface GameState {
   readonly hazards: readonly Hazard[];
   readonly sparks: readonly SparkParticle[];
   readonly popups: readonly ScorePopup[];
-  readonly cutIn: CutInEffect | null;
   readonly score: number;
   readonly comboMultiplier: number;
   readonly maxCombo: number;

@@ -57,11 +57,8 @@ describe('core game engine loop', () => {
     expect(next.peakMoment?.hazards.length).toBe(2);
   });
 
-  it('continuously spawns hazards without waiting for existing hazards to disappear and without background warning cut-in text', () => {
-    const initial = {
-      ...startNewGame(createInitialGameState()),
-      cutIn: null,
-    };
+  it('continuously spawns hazards without waiting for existing hazards to disappear', () => {
+    const initial = startNewGame(createInitialGameState());
     const existingBullet: Hazard = {
       id: 'existing-1',
       kind: 'BULLET',
@@ -85,11 +82,10 @@ describe('core game engine loop', () => {
     expect(afterStep.hazards.some((h) => h.kind === 'LASER')).toBe(true);
     expect(afterStep.hazards.some((h) => h.kind === 'BOMB')).toBe(true);
     expect(afterStep.hazards.filter((h) => h.kind === 'BULLET').length).toBeGreaterThan(1);
-    // Spawning lasers/bombs must NOT inject background warning cut-in text
-    expect(afterStep.cutIn).toBeNull();
+    expect('cutIn' in afterStep).toBe(false);
   });
 
-  it('triggers last-life warning cut-in when reduced to 1 life', () => {
+  it('triggers last-life warning event when reduced to 1 life without cut-in state', () => {
     const initial = startNewGame(createInitialGameState());
     const hitBullet: Hazard = {
       id: 'hit-b',
@@ -115,7 +111,7 @@ describe('core game engine loop', () => {
     expect(events.directHit).toBe(true);
     expect(events.lastLifeWarning).toBe(true);
     expect(at1Life.lives).toBe(1);
-    expect(at1Life.cutIn?.topText).toContain('FINAL STAND');
+    expect('cutIn' in at1Life).toBe(false);
   });
 
   it('enters GAME_OVER explosion phase at 0 lives before transitioning to RESULT after explosion timer completes', () => {

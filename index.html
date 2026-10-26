@@ -9,7 +9,7 @@
     <title>GRAZE SURVIVOR</title>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
-  <body data-theme="phantom">
+  <body>
     <main class="app-shell">
       <div class="cabinet" id="cabinet">
         <canvas id="game-canvas" aria-label="GRAZE SURVIVOR playfield"></canvas>
@@ -22,15 +22,16 @@
         <!-- Title Screen Overlay -->
         <section id="title-overlay" class="overlay active">
           <div class="overlay-card">
-            <div class="persona-badge-tag">PHANTOM BULLET GRAZER</div>
-            <h1 class="persona-title">GRAZE SURVIVOR</h1>
+            <h1 class="game-title">GRAZE SURVIVOR</h1>
             <p class="best-line" id="title-best">BEST SCORE: 0</p>
             <button id="btn-start" type="button" class="primary-btn full-width-btn">
               START GAME
             </button>
             <div class="result-actions">
               <button id="btn-open-ranking" type="button" class="secondary-btn">RANKING</button>
-              <button id="btn-open-options-title" type="button" class="accent-btn">OPTIONS</button>
+              <button id="btn-open-options-title" type="button" class="secondary-btn">
+                OPTIONS
+              </button>
             </div>
           </div>
         </section>
@@ -38,7 +39,7 @@
         <!-- Ranking Screen Overlay (Title -> Ranking) -->
         <section id="ranking-overlay" class="overlay">
           <div class="overlay-card">
-            <div class="persona-heading">HALL OF FAME // TOP 10</div>
+            <div class="section-heading">RANKING // TOP 10</div>
             <div class="ranking-box">
               <ol id="title-ranking-list" class="ranking-list ranking-list-tall"></ol>
             </div>
@@ -46,7 +47,7 @@
               <button id="btn-ranking-back" type="button" class="secondary-btn">
                 BACK TO TITLE
               </button>
-              <button id="btn-open-options-ranking" type="button" class="accent-btn">
+              <button id="btn-open-options-ranking" type="button" class="secondary-btn">
                 OPTIONS
               </button>
             </div>
@@ -56,12 +57,14 @@
         <!-- Pause Screen Overlay -->
         <section id="pause-overlay" class="overlay">
           <div class="overlay-card">
-            <div class="persona-heading">PAUSE // INTERMISSION</div>
+            <div class="section-heading">PAUSED</div>
             <button id="btn-resume" type="button" class="primary-btn full-width-btn">
               RESUME
             </button>
             <div class="result-actions">
-              <button id="btn-open-options-pause" type="button" class="accent-btn">OPTIONS</button>
+              <button id="btn-open-options-pause" type="button" class="secondary-btn">
+                OPTIONS
+              </button>
               <button id="btn-quit" type="button" class="secondary-btn">TITLE</button>
             </div>
           </div>
@@ -70,7 +73,7 @@
         <!-- Result Screen Overlay -->
         <section id="result-overlay" class="overlay">
           <div class="overlay-card result-card-container">
-            <div id="result-banner" class="persona-heading">SHOWTIME // RESULT</div>
+            <div id="result-banner" class="section-heading">RESULT</div>
             <img
               id="result-card-preview"
               class="result-card-preview"
@@ -78,7 +81,7 @@
             />
             <div class="result-actions">
               <button id="btn-share" type="button" class="primary-btn">SHARE RESULT</button>
-              <button id="btn-retry" type="button" class="accent-btn">PLAY AGAIN</button>
+              <button id="btn-retry" type="button" class="secondary-btn">PLAY AGAIN</button>
             </div>
             <div class="result-actions">
               <button id="btn-result-title" type="button" class="secondary-btn">TITLE</button>
@@ -97,28 +100,10 @@
         <div id="options-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
           <aside id="options-panel" class="options-panel">
             <div class="modal-header">
-              <span class="modal-title">PHANTOM CONFIG // OPTIONS</span>
-              <button id="btn-close-options" type="button" class="accent-btn modal-close-btn">
-                CLOSE ✕
+              <span class="modal-title">OPTIONS</span>
+              <button id="btn-close-options" type="button" class="secondary-btn modal-close-btn">
+                CLOSE
               </button>
-            </div>
-
-            <div class="option-row">
-              <span class="option-label">VIVID PALETTE</span>
-              <div class="btn-group">
-                <button type="button" class="toggle-btn theme-btn active" data-theme-id="phantom">
-                  PHANTOM
-                </button>
-                <button type="button" class="toggle-btn theme-btn" data-theme-id="tartarus">
-                  TARTARUS
-                </button>
-                <button type="button" class="toggle-btn theme-btn" data-theme-id="channel">
-                  CHANNEL
-                </button>
-                <button type="button" class="toggle-btn theme-btn" data-theme-id="acid">
-                  ACID
-                </button>
-              </div>
             </div>
 
             <div class="option-row">
@@ -174,7 +159,7 @@
                 <button id="btn-rev-x" type="button" class="toggle-btn">REVERSE X: OFF</button>
                 <button id="btn-rev-y" type="button" class="toggle-btn">REVERSE Y: OFF</button>
                 <button id="btn-reset-center" type="button" class="toggle-btn">
-                  [ RESET CENTER ]
+                  RESET CENTER
                 </button>
               </div>
             </div>

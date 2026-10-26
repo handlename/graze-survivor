@@ -19,7 +19,6 @@ import {
   INVULNERABLE_MS,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
-  type CutInEffect,
   type GamePhase,
   type GameState,
   type Hazard,
@@ -59,7 +58,6 @@ export function createInitialGameState(): GameState {
     hazards: [],
     sparks: [],
     popups: [],
-    cutIn: null,
     score: 0,
     comboMultiplier: 1.0,
     maxCombo: 1.0,
@@ -90,13 +88,6 @@ export function startNewGame(prev: GameState): GameState {
       invulnerableMs: 0,
       trail: [startPos],
     },
-    cutIn: {
-      topText: 'SHOWTIME!!',
-      bottomText: 'GRAZE THE EDGE',
-      color: '#ff0044',
-      remainingMs: 900,
-      totalMs: 900,
-    },
   };
 }
 
@@ -126,12 +117,10 @@ export function resetPlayerCenter(state: GameState): GameState {
 function stepVisualEffects(
   sparks: readonly SparkParticle[],
   popups: readonly ScorePopup[],
-  cutIn: CutInEffect | null,
   dtMs: number
 ): {
   readonly sparks: SparkParticle[];
   readonly popups: ScorePopup[];
-  readonly cutIn: CutInEffect | null;
 } {
   const dtSec = dtMs / 1000;
   const nextSparks: SparkParticle[] = [];
@@ -159,12 +148,7 @@ function stepVisualEffects(
     }
   }
 
-  const nextCutIn =
-    cutIn && cutIn.remainingMs - dtMs > 0
-      ? { ...cutIn, remainingMs: cutIn.remainingMs - dtMs }
-      : null;
-
-  return { sparks: nextSparks, popups: nextPopups, cutIn: nextCutIn };
+  return { sparks: nextSparks, popups: nextPopups };
 }
 
 export function stepGame(
@@ -194,7 +178,7 @@ export function stepGame(
 
   // Lingering player explosion phase before transitioning to RESULT
   if (state.phase === 'GAME_OVER') {
-    const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
+    const fx = stepVisualEffects(state.sparks, state.popups, dtMs);
     const remainingTimer = state.gameOverTimerMs - dtMs;
 
     // Spawn secondary explosion bursts while timer is active
@@ -207,7 +191,7 @@ export function stepGame(
           y: state.player.y + (rng() - 0.5) * 16,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          color: i % 2 === 0 ? '#ff3300' : '#ffcc00',
+          color: i % 2 === 0 ? '#E62E2E' : '#111111',
           remainingMs: 650,
           totalMs: 650,
         });
@@ -222,7 +206,6 @@ export function stepGame(
         hazards: stepHazards(state.hazards, dtMs * 0.35),
         sparks: fx.sparks,
         popups: fx.popups,
-        cutIn: fx.cutIn,
         gameOverTimerMs: Math.max(0, remainingTimer),
         screenShakeMs: Math.max(0, state.screenShakeMs - dtMs),
         hitFlashMs: Math.max(0, state.hitFlashMs - dtMs),
@@ -242,7 +225,7 @@ export function stepGame(
   const nextTrail = [clampedPos, ...state.player.trail.slice(0, 11)];
 
   if (state.phase !== 'PLAYING') {
-    const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
+    const fx = stepVisualEffects(state.sparks, state.popups, dtMs);
     return {
       state: {
         ...state,
@@ -254,7 +237,6 @@ export function stepGame(
         },
         sparks: fx.sparks,
         popups: fx.popups,
-        cutIn: fx.cutIn,
         screenShakeMs: Math.max(0, state.screenShakeMs - dtMs),
         hitFlashMs: Math.max(0, state.hitFlashMs - dtMs),
       },
@@ -284,8 +266,7 @@ export function stepGame(
   }
 
   let hazards: Hazard[] = [...stepHazards(state.hazards, dtMs)];
-  const fx = stepVisualEffects(state.sparks, state.popups, state.cutIn, dtMs);
-  let cutIn: CutInEffect | null = fx.cutIn;
+  const fx = stepVisualEffects(state.sparks, state.popups, dtMs);
 
   // Independent continuous spawners with randomized jitter so lasers and bombs never lockstep
   const threat = computeThreatLevel(survivalTimeMs);
@@ -362,13 +343,6 @@ export function stepGame(
         gameOverTimerMs = GAME_OVER_EXPLOSION_MS;
         screenShakeMs = 900;
         hitFlashMs = 700;
-        cutIn = {
-          topText: 'ALL OUT // WIPED',
-          bottomText: 'SIGNAL LOST',
-          color: '#ff0044',
-          remainingMs: GAME_OVER_EXPLOSION_MS,
-          totalMs: GAME_OVER_EXPLOSION_MS,
-        };
         // Massive explosion debris burst from player coordinates
         for (let i = 0; i < 42; i++) {
           const angle = (i / 42) * Math.PI * 2 + (rng() - 0.5) * 0.2;
@@ -378,28 +352,13 @@ export function stepGame(
             y: clampedPos.y,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
-            color: i % 3 === 0 ? '#ffffff' : i % 2 === 0 ? '#fff000' : '#ff0044',
+            color: i % 2 === 0 ? '#E62E2E' : '#111111',
             remainingMs: 1100,
             totalMs: 1100,
           });
         }
       } else if (lives === 1) {
         lastLifeWarning = true;
-        cutIn = {
-          topText: 'FINAL STAND',
-          bottomText: 'WARNING: LAST LIFE',
-          color: '#ff0044',
-          remainingMs: 1500,
-          totalMs: 1500,
-        };
-      } else {
-        cutIn = {
-          topText: 'DIRECT HIT!',
-          bottomText: 'COMBO BROKEN',
-          color: '#ff0044',
-          remainingMs: 950,
-          totalMs: 950,
-        };
       }
     } else {
       const updatedHazards: Hazard[] = [];
@@ -432,7 +391,7 @@ export function stepGame(
                 y: clampedPos.y,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed,
-                color: reward.isCritical ? '#ffcc00' : '#00ffee',
+                color: reward.isCritical ? '#E62E2E' : '#111111',
                 remainingMs: 260,
                 totalMs: 260,
               });
@@ -442,8 +401,8 @@ export function stepGame(
               fx.popups.push({
                 x: clampedPos.x + (rng() - 0.5) * 32,
                 y: clampedPos.y - 16 - rng() * 12,
-                text: reward.isCritical ? `MAX +${reward.scoreDelta}!!` : `+${reward.scoreDelta}`,
-                color: reward.isCritical ? '#fff000' : '#00f5ff',
+                text: `+${reward.scoreDelta}`,
+                color: reward.isCritical ? '#E62E2E' : '#111111',
                 isCritical: reward.isCritical,
                 remainingMs: 520,
               });
@@ -458,17 +417,8 @@ export function stepGame(
       }
       hazards = updatedHazards;
 
-      if (grazeCount > 0) {
-        if (criticalGrazeCount > 0 || activeGrazeSources >= 2) {
-          screenShakeMs = Math.max(screenShakeMs, 90);
-          cutIn = {
-            topText: activeGrazeSources >= 2 ? 'CROSS OVERDRIVE' : 'PHANTOM GRAZE',
-            bottomText: `COMBO ×${comboMultiplier.toFixed(1)}`,
-            color: '#fff000',
-            remainingMs: 420,
-            totalMs: 420,
-          };
-        }
+      if (grazeCount > 0 && (criticalGrazeCount > 0 || activeGrazeSources >= 2)) {
+        screenShakeMs = Math.max(screenShakeMs, 90);
       }
     }
   }
@@ -525,7 +475,6 @@ export function stepGame(
       hazards,
       sparks: nextSparks,
       popups: fx.popups,
-      cutIn,
       score,
       comboMultiplier,
       maxCombo,

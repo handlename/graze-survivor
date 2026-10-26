@@ -9,7 +9,7 @@ import { computeGyroDelta, computeSwipeDelta, type MotionSample } from './core/i
 import type { ControlOptions, GameState, RankingRecord } from './core/types';
 import { SoundController } from './shell/audio';
 import { requestSensorPermissions, type PermissionTarget } from './shell/permissions';
-import { CanvasRenderer, setActiveTheme, type VividThemeId } from './shell/renderer';
+import { CanvasRenderer } from './shell/renderer';
 import {
   buildShareMessage,
   renderResultCardCanvas,
@@ -26,8 +26,6 @@ import {
 } from './shell/storage';
 
 handleUrlResetParam();
-
-const THEME_STORAGE_KEY = 'graze-survivor:theme:v1';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const titleOverlay = document.getElementById('title-overlay') as HTMLElement;
@@ -63,8 +61,6 @@ const btnOpenOptionsResult = document.getElementById(
 ) as HTMLButtonElement;
 const btnCloseOptions = document.getElementById('btn-close-options') as HTMLButtonElement;
 
-const themeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.theme-btn'));
-
 const btnModeSwipe = document.getElementById('btn-mode-swipe') as HTMLButtonElement;
 const btnModeGyro = document.getElementById('btn-mode-gyro') as HTMLButtonElement;
 const swipeControls = document.getElementById('swipe-controls') as HTMLElement;
@@ -88,8 +84,6 @@ const sound = new SoundController();
 let options: ControlOptions = loadControlOptions();
 let state: GameState = createInitialGameState();
 let latestResultCanvas: HTMLCanvasElement | null = null;
-let latestRecord: RankingRecord | null = null;
-let latestIsNewRecord = false;
 let latestShareText = '';
 
 let activePointerId: number | null = null;
@@ -103,39 +97,6 @@ let lastMotionTimestamp: number | null = null;
 let hasReceivedMotionSample = false;
 let lastOrientationBeta: number | null = null;
 let lastOrientationGamma: number | null = null;
-
-function applyVividTheme(themeId: VividThemeId): void {
-  const palette = setActiveTheme(themeId);
-  document.body.setAttribute('data-theme', palette.id);
-  for (const btn of themeButtons) {
-    btn.classList.toggle('active', btn.dataset.themeId === palette.id);
-  }
-  try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, palette.id);
-  } catch {
-    // Ignore storage error
-  }
-  if (state.phase === 'RESULT' && latestRecord) {
-    latestResultCanvas = renderResultCardCanvas(state, latestRecord, latestIsNewRecord);
-    resultCardPreview.src = latestResultCanvas.toDataURL('image/png');
-  }
-}
-
-try {
-  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY) as VividThemeId | null;
-  if (savedTheme) {
-    applyVividTheme(savedTheme);
-  }
-} catch {
-  // Ignore storage error
-}
-
-for (const btn of themeButtons) {
-  btn.addEventListener('click', () => {
-    const id = (btn.dataset.themeId ?? 'phantom') as VividThemeId;
-    applyVividTheme(id);
-  });
-}
 
 function openOptionsModal(): void {
   optionsModal.classList.remove('hidden');
@@ -205,7 +166,7 @@ function renderRankingListInto(
   if (rankings.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'ranking-empty';
-    empty.textContent = 'NO RECORDS YET // BE THE FIRST PHANTOM!';
+    empty.textContent = 'NO RECORDS YET';
     targetList.appendChild(empty);
     return;
   }
@@ -562,11 +523,7 @@ function onFrame(now: number): void {
       timestamp: formatTimestamp(new Date()),
     };
     const saved = saveRankingRecord(record);
-    latestRecord = record;
-    latestIsNewRecord = saved.isNewRecord;
-    resultBanner.textContent = saved.isNewRecord
-      ? 'NEW RECORD // SHOWTIME!!'
-      : 'ALL-OUT REPORT // RESULT';
+    resultBanner.textContent = saved.isNewRecord ? 'NEW RECORD' : 'RESULT';
     latestResultCanvas = renderResultCardCanvas(state, record, saved.isNewRecord);
     resultCardPreview.src = latestResultCanvas.toDataURL('image/png');
     latestShareText = buildShareMessage(record, saved.isNewRecord);
