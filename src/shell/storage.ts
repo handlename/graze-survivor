@@ -1,7 +1,7 @@
 import type { ControlOptions, RankingRecord } from '../core/types';
 
-export const RANKING_STORAGE_KEY = 'dodge-survivor:rankings';
-export const OPTIONS_STORAGE_KEY = 'dodge-survivor:options';
+export const RANKING_STORAGE_KEY = 'graze-survivor:rankings';
+export const OPTIONS_STORAGE_KEY = 'graze-survivor:options';
 const MAX_RANKINGS = 10;
 
 export const DEFAULT_CONTROL_OPTIONS: ControlOptions = {

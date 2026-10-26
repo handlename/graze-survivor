@@ -19,7 +19,7 @@ import {
 } from './renderer';
 import { formatSurvivalTime } from './storage';
 
-export const PUBLIC_GAME_URL = 'https://handlename.github.io/dodge-survivor/';
+export const PUBLIC_GAME_URL = 'https://handlename.github.io/graze-survivor/';
 
 function renderPeakSnapshotCrop(
   ctx: CanvasRenderingContext2D,
@@ -298,7 +298,7 @@ export function renderResultCardCanvas(
 
   drawPersonaText(
     ctx,
-    'DODGE SURVIVOR',
+    'GRAZE SURVIVOR',
     28,
     350,
     22,
@@ -332,7 +332,7 @@ export function buildShareMessage(record: RankingRecord, isNewRecord: boolean): 
     headline,
     `SCORE: ${record.score.toLocaleString('en-US')} (MAX COMBO ×${record.maxCombo.toFixed(1)})`,
     `SURVIVAL TIME: ${formatSurvivalTime(record.survivalTimeMs)}`,
-    'DODGE SURVIVOR #DODGESURVIVOR',
+    'GRAZE SURVIVOR #GRAZESURVIVOR',
     PUBLIC_GAME_URL,
   ].join('\n');
 }
@@ -357,7 +357,7 @@ export async function shareResultImage(
   text: string
 ): Promise<'shared' | 'fallback'> {
   const dataUrl = canvas.toDataURL('image/png');
-  const file = dataUrlToFile(dataUrl, 'dodge-survivor-result.png');
+  const file = dataUrlToFile(dataUrl, 'graze-survivor-result.png');
 
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     const shareData: ShareData =
@@ -377,7 +377,7 @@ export async function shareResultImage(
   if (typeof document !== 'undefined') {
     const a = document.createElement('a');
     a.href = dataUrl;
-    a.download = 'dodge-survivor-result.png';
+    a.download = 'graze-survivor-result.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -27,7 +27,7 @@ import {
 
 handleUrlResetParam();
 
-const THEME_STORAGE_KEY = 'dodge-survivor:theme:v1';
+const THEME_STORAGE_KEY = 'graze-survivor:theme:v1';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const titleOverlay = document.getElementById('title-overlay') as HTMLElement;

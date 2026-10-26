@@ -49,23 +49,23 @@ describe('local ranking and options persistence', () => {
 
   it('survives corrupted JSON in localStorage without throwing', () => {
     const store = createMemoryStorage({
-      'dodge-survivor:rankings': '{not-valid-json',
-      'dodge-survivor:options': 'null',
+      'graze-survivor:rankings': '{not-valid-json',
+      'graze-survivor:options': 'null',
     });
     expect(loadRanking(store)).toEqual([]);
     expect(loadControlOptions(store).mode).toBe('SWIPE');
   });
 
   it('clears ranking storage and strips ?reset=1 from URL', () => {
-    const store = createMemoryStorage({ 'dodge-survivor:rankings': '[{"score":999}]' });
+    const store = createMemoryStorage({ 'graze-survivor:rankings': '[{"score":999}]' });
     const replaceState = vi.fn();
     const didReset = handleUrlResetParam(
-      { search: '?reset=1&foo=bar', pathname: '/dodge-survivor/', hash: '' },
+      { search: '?reset=1&foo=bar', pathname: '/graze-survivor/', hash: '' },
       { replaceState },
       store
     );
     expect(didReset).toBe(true);
     expect(loadRanking(store)).toEqual([]);
-    expect(replaceState).toHaveBeenCalledWith(null, '', '/dodge-survivor/?foo=bar');
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/graze-survivor/?foo=bar');
   });
 });
