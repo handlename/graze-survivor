@@ -125,16 +125,36 @@ function createLaserThroughPoint(
   halfWidth = 6,
   staggerMs = 0
 ): LaserHazard {
-  const span = 800;
-  const dx = Math.cos(angleRad) * span;
-  const dy = Math.sin(angleRad) * span;
+  const dirX = Math.cos(angleRad);
+  const dirY = Math.sin(angleRad);
+  let tMin = -800;
+  let tMax = 800;
+
+  if (Math.abs(dirX) > 1e-6) {
+    const t1 = (0 - focusX) / dirX;
+    const t2 = (LOGICAL_WIDTH - focusX) / dirX;
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+  }
+  if (Math.abs(dirY) > 1e-6) {
+    const t1 = (HUD_HEIGHT - focusY) / dirY;
+    const t2 = (LOGICAL_HEIGHT - focusY) / dirY;
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+  }
+
+  if (tMax <= tMin + 1) {
+    tMin = -800;
+    tMax = 800;
+  }
+
   return {
     id,
     kind: 'LASER',
-    x1: focusX - dx,
-    y1: focusY - dy,
-    x2: focusX + dx,
-    y2: focusY + dy,
+    x1: focusX + dirX * tMin,
+    y1: focusY + dirY * tMin,
+    x2: focusX + dirX * tMax,
+    y2: focusY + dirY * tMax,
     halfWidth,
     elapsedMs: -staggerMs,
     warningDurationMs: 950,
@@ -290,28 +310,86 @@ export function spawnLaserFormation(
   idPrefix: string,
   rng: () => number
 ): readonly LaserHazard[] {
+  const canCage = threat.laserCount >= 3;
+  const patternCount = canCage ? 3 : 2;
+  const patternType = Math.min(patternCount - 1, Math.floor(rng() * patternCount)); // 0: PINPOINT, 1: PARALLEL, 2: CAGE (3+ lasers only)
   const arenaTop = HUD_HEIGHT + 64;
   const arenaBottom = LOGICAL_HEIGHT - 64;
   const focusX = 56 + rng() * (LOGICAL_WIDTH - 112);
   const focusY = arenaTop + rng() * (arenaBottom - arenaTop);
-  const baseAngle = rng() * Math.PI;
+  const baseAngle = rng() * Math.PI * 2;
   const lasers: LaserHazard[] = [];
 
-  for (let i = 0; i < threat.laserCount; i++) {
-    const angle = baseAngle + (i * Math.PI) / threat.laserCount + (rng() - 0.5) * 0.22;
-    const offset = (i - (threat.laserCount - 1) / 2) * 14;
-    const lx = Math.max(
-      40,
-      Math.min(LOGICAL_WIDTH - 40, focusX + Math.cos(angle + Math.PI / 2) * offset)
-    );
-    const ly = Math.max(
-      arenaTop,
-      Math.min(arenaBottom, focusY + Math.sin(angle + Math.PI / 2) * offset)
-    );
-    const staggerMs = Math.round(i * (40 + rng() * 80));
-    lasers.push(
-      createLaserThroughPoint(`${idPrefix}-l-${i}`, lx, ly, angle, 5.5 + (i % 2), staggerMs)
-    );
+  if (patternType === 0) {
+    // Pattern 0 (PINPOINT): All lasers intersect at (focusX, focusY) with line slopes spaced by PI / count
+    // so every pair of intersecting lines has an acute angle >= 30 degrees (PI / 6), while firing direction flips across 0..2PI.
+    const stepRad = Math.PI / threat.laserCount;
+    const minAcuteRad = Math.PI / 6; // 30 degrees
+    const maxJitterRad = Math.max(0, Math.min(0.12, (stepRad - minAcuteRad) * 0.45));
+
+    for (let i = 0; i < threat.laserCount; i++) {
+      const jitter = (rng() - 0.5) * 2 * maxJitterRad;
+      const directionFlip = i > 0 && rng() < 0.5 ? Math.PI : 0;
+      const angle = baseAngle + i * stepRad + jitter + directionFlip;
+      const staggerMs = Math.round(i * (40 + rng() * 80));
+      lasers.push(
+        createLaserThroughPoint(
+          `${idPrefix}-l-pin-${i}`,
+          focusX,
+          focusY,
+          angle,
+          5.5 + (i % 2),
+          staggerMs
+        )
+      );
+    }
+  } else if (patternType === 1) {
+    // Pattern 1 (PARALLEL): Equally spaced parallel lanes with alternating opposing firing directions
+    const spacing = 28;
+    const normalAngle = baseAngle + Math.PI / 2;
+    for (let i = 0; i < threat.laserCount; i++) {
+      const offset = (i - (threat.laserCount - 1) / 2) * spacing;
+      const lx = Math.max(
+        36,
+        Math.min(LOGICAL_WIDTH - 36, focusX + Math.cos(normalAngle) * offset)
+      );
+      const ly = Math.max(
+        arenaTop - 16,
+        Math.min(arenaBottom + 16, focusY + Math.sin(normalAngle) * offset)
+      );
+      const angle = baseAngle + (i % 2 === 1 ? Math.PI : 0);
+      const staggerMs = Math.round(i * (55 + rng() * 65));
+      lasers.push(
+        createLaserThroughPoint(
+          `${idPrefix}-l-par-${i}`,
+          lx,
+          ly,
+          angle,
+          5.5 + (i % 2),
+          staggerMs
+        )
+      );
+    }
+  } else {
+    // Pattern 2 (CAGE, 3+ lasers): Polygon ring tangent to a circle of radius cageRadius around (focusX, focusY)
+    const cageRadius = 38;
+    for (let i = 0; i < threat.laserCount; i++) {
+      const theta = baseAngle + (i * Math.PI * 2) / threat.laserCount;
+      const lx = focusX + Math.cos(theta) * cageRadius;
+      const ly = focusY + Math.sin(theta) * cageRadius;
+      const tangentAngle = theta + Math.PI / 2;
+      const staggerMs = Math.round(i * (45 + rng() * 75));
+      lasers.push(
+        createLaserThroughPoint(
+          `${idPrefix}-l-cage-${i}`,
+          lx,
+          ly,
+          tangentAngle,
+          5.5 + (i % 2),
+          staggerMs
+        )
+      );
+    }
   }
 
   return lasers;

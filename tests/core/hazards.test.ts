@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { distanceToSegment } from '../../src/core/geometry';
 import {
   computeThreatLevel,
   getBombPhase,
@@ -8,7 +9,7 @@ import {
   spawnLaserFormation,
   stepHazards,
 } from '../../src/core/hazards';
-import type { BombHazard } from '../../src/core/types';
+import { HUD_HEIGHT, LOGICAL_HEIGHT, LOGICAL_WIDTH, type BombHazard } from '../../src/core/types';
 
 describe('hazards lifecycle and continuous spawners', () => {
   it('progresses bomb through single CONVERGING -> HOLD -> ACTIVE -> EXPIRED lifecycle', () => {
@@ -88,5 +89,130 @@ describe('hazards lifecycle and continuous spawners', () => {
 
     const stepped = stepHazards([...lasers, ...bombs], 4000);
     expect(stepped.length).toBe(0);
+  });
+
+  it('clips laser endpoints to playfield bounds, covers 360-degree directions, and supports PINPOINT, PARALLEL, and CAGE formations with >= 30deg intersection angles', () => {
+    const acuteIntersectionAngleDeg = (
+      a: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number },
+      b: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number }
+    ): number => {
+      const adx = a.x2 - a.x1;
+      const ady = a.y2 - a.y1;
+      const bdx = b.x2 - b.x1;
+      const bdy = b.y2 - b.y1;
+      const dot = Math.abs(adx * bdx + ady * bdy) / (Math.hypot(adx, ady) * Math.hypot(bdx, bdy));
+      const clampedDot = Math.max(0, Math.min(1, dot));
+      return (Math.acos(clampedDot) * 180) / Math.PI;
+    };
+
+    const makeSequenceRng = (firstValues: number[]) => {
+      let idx = 0;
+      return () => {
+        const val = idx < firstValues.length ? firstValues[idx] : 0.5;
+        idx++;
+        return val;
+      };
+    };
+
+    // 1. Pattern 0 (PINPOINT): check across laserCount = 2, 3, 4, 5 that all pairs intersect at >= 30 degrees
+    for (const count of [2, 3, 4, 5]) {
+      const threat = { ...computeThreatLevel(90_000), laserCount: count };
+      const pinpointLasers = spawnLaserFormation(
+        threat,
+        `pin-${count}`,
+        makeSequenceRng([0.1, 0.5, 0.5, 0.75, 0.9, 0.1, 0.9, 0.1])
+      );
+      expect(pinpointLasers).toHaveLength(count);
+
+      const expectedFocusX = 56 + 0.5 * (LOGICAL_WIDTH - 112);
+      const arenaTop = HUD_HEIGHT + 64;
+      const arenaBottom = LOGICAL_HEIGHT - 64;
+      const expectedFocusY = arenaTop + 0.5 * (arenaBottom - arenaTop);
+
+      if (count === 4) {
+        // First laser with baseAngleRoll=0.75 points upward (y2 < y1), proving full 0..2PI range
+        expect(pinpointLasers[0].y2).toBeLessThan(pinpointLasers[0].y1);
+      }
+
+      for (const l of pinpointLasers) {
+        expect(l.x1).toBeGreaterThanOrEqual(-1e-4);
+        expect(l.x1).toBeLessThanOrEqual(LOGICAL_WIDTH + 1e-4);
+        expect(l.y1).toBeGreaterThanOrEqual(HUD_HEIGHT - 1e-4);
+        expect(l.y1).toBeLessThanOrEqual(LOGICAL_HEIGHT + 1e-4);
+        expect(l.x2).toBeGreaterThanOrEqual(-1e-4);
+        expect(l.x2).toBeLessThanOrEqual(LOGICAL_WIDTH + 1e-4);
+        expect(l.y2).toBeGreaterThanOrEqual(HUD_HEIGHT - 1e-4);
+        expect(l.y2).toBeLessThanOrEqual(LOGICAL_HEIGHT + 1e-4);
+
+        expect(
+          distanceToSegment(expectedFocusX, expectedFocusY, l.x1, l.y1, l.x2, l.y2)
+        ).toBeLessThan(1e-3);
+      }
+
+      // Every pair of lasers in PINPOINT must have an acute intersection angle >= 30 degrees
+      for (let i = 0; i < pinpointLasers.length; i++) {
+        for (let j = i + 1; j < pinpointLasers.length; j++) {
+          expect(acuteIntersectionAngleDeg(pinpointLasers[i], pinpointLasers[j])).toBeGreaterThanOrEqual(
+            29.9
+          );
+        }
+      }
+    }
+
+    // 2. When laserCount < 3 (e.g., 2 lasers), CAGE is never selected even with patternRoll = 0.85
+    const threat2 = { ...computeThreatLevel(0), laserCount: 2 };
+    const nonCageAt2 = spawnLaserFormation(
+      threat2,
+      'two-laser-test',
+      makeSequenceRng([0.85, 0.5, 0.5, 0.2])
+    );
+    expect(nonCageAt2).toHaveLength(2);
+    expect(nonCageAt2.every((l) => !l.id.includes('-l-cage-'))).toBe(true);
+
+    // 3. Pattern 1 (PARALLEL, patternRoll = 0.5 at count = 4): parallel lanes with alternating directions
+    const threat4 = { ...computeThreatLevel(90_000), laserCount: 4 };
+    const parallelLasers = spawnLaserFormation(
+      threat4,
+      'par',
+      makeSequenceRng([0.5, 0.5, 0.5, 0.15])
+    );
+    expect(parallelLasers).toHaveLength(4);
+    for (let i = 0; i < parallelLasers.length - 1; i++) {
+      const a = parallelLasers[i];
+      const b = parallelLasers[i + 1];
+      const adx = a.x2 - a.x1;
+      const ady = a.y2 - a.y1;
+      const bdx = b.x2 - b.x1;
+      const bdy = b.y2 - b.y1;
+      const alen = Math.hypot(adx, ady);
+      const blen = Math.hypot(bdx, bdy);
+      const cosAngle = (adx * bdx + ady * bdy) / (alen * blen);
+      expect(cosAngle).toBeCloseTo(-1, 3);
+    }
+
+    // 4. Pattern 2 (CAGE, patternRoll = 0.85 at count = 4): tangent polygon around focus point with >= 30deg adjacent angles
+    const expectedFocusX = 56 + 0.5 * (LOGICAL_WIDTH - 112);
+    const arenaTop = HUD_HEIGHT + 64;
+    const arenaBottom = LOGICAL_HEIGHT - 64;
+    const expectedFocusY = arenaTop + 0.5 * (arenaBottom - arenaTop);
+
+    const cageLasers = spawnLaserFormation(
+      threat4,
+      'cage-test',
+      makeSequenceRng([0.85, 0.5, 0.5, 0.2])
+    );
+    expect(cageLasers).toHaveLength(4);
+    expect(cageLasers.every((l) => l.id.includes('-l-cage-'))).toBe(true);
+    const cageDistances = cageLasers.map((l) =>
+      distanceToSegment(expectedFocusX, expectedFocusY, l.x1, l.y1, l.x2, l.y2)
+    );
+    expect(cageDistances[0]).toBeGreaterThanOrEqual(24);
+    for (const d of cageDistances) {
+      expect(d).toBeCloseTo(cageDistances[0], 2);
+    }
+    for (let i = 0; i < cageLasers.length; i++) {
+      const next = cageLasers[(i + 1) % cageLasers.length];
+      expect(acuteIntersectionAngleDeg(cageLasers[i], next)).toBeGreaterThanOrEqual(29.9);
+    }
   });
 });

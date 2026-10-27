@@ -154,6 +154,102 @@ export function renderPlayerShipAndRing(
   ctx.restore();
 }
 
+export function renderLaserHazard(
+  ctx: CanvasRenderingContext2D,
+  laser: LaserHazard
+): void {
+  if (laser.elapsedMs < 0) return;
+  const phase = getLaserPhase(laser);
+  if (phase === 'WARNING') {
+    const drawProgress = Math.min(1, laser.elapsedMs / 140);
+    const ex = laser.x1 + (laser.x2 - laser.x1) * drawProgress;
+    const ey = laser.y1 + (laser.y2 - laser.y1) * drawProgress;
+    const imminence = Math.max(0, Math.min(1, laser.elapsedMs / laser.warningDurationMs));
+
+    // 1. Lock-on beam width corridor that snaps inward right before ignition
+    let corridorWidth = laser.halfWidth * 2;
+    if (imminence > 0.82) {
+      const snapT = (imminence - 0.82) / 0.18;
+      corridorWidth = laser.halfWidth * 2 * (1 - snapT * 0.85);
+    }
+    ctx.save();
+    ctx.strokeStyle = imminence > 0.82 ? 'rgba(230, 46, 46, 0.28)' : PALETTE.dangerSoft;
+    ctx.lineWidth = corridorWidth;
+    ctx.beginPath();
+    ctx.moveTo(laser.x1, laser.y1);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. Marching directional dashed line accelerating from (x1, y1) toward (x2, y2)
+    ctx.save();
+    ctx.strokeStyle = PALETTE.danger;
+    ctx.lineWidth = imminence > 0.78 ? 2.0 : 1.2;
+    ctx.setLineDash([8, 6]);
+    const marchSpeed = 0.08 + imminence * 0.14;
+    ctx.lineDashOffset = -(laser.elapsedMs * marchSpeed);
+    ctx.beginPath();
+    ctx.moveTo(laser.x1, laser.y1);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    ctx.restore();
+  } else if (phase === 'ACTIVE') {
+    const activeElapsed = laser.elapsedMs - laser.warningDurationMs;
+    const collapseWindowMs = Math.min(120, laser.activeDurationMs * 0.25);
+
+    // Ignition spike (first 75ms) and tapered decay collapse (last ~120ms)
+    let widthScale = 1.0;
+    let isIgnitionFlash = false;
+    if (activeElapsed < 75) {
+      const flashT = 1 - activeElapsed / 75;
+      widthScale = 1.0 + flashT * 0.55;
+      isIgnitionFlash = activeElapsed < 40;
+    } else if (activeElapsed > laser.activeDurationMs - collapseWindowMs) {
+      const collapseT =
+        (activeElapsed - (laser.activeDurationMs - collapseWindowMs)) / collapseWindowMs;
+      widthScale = Math.max(0.08, 1 - collapseT);
+    }
+
+    const currentHalfW = laser.halfWidth * widthScale;
+
+    if (isIgnitionFlash) {
+      ctx.strokeStyle = PALETTE.fg;
+      ctx.lineWidth = currentHalfW * 2 + 2.5;
+      ctx.beginPath();
+      ctx.moveTo(laser.x1, laser.y1);
+      ctx.lineTo(laser.x2, laser.y2);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = PALETTE.danger;
+    ctx.lineWidth = currentHalfW * 2;
+    ctx.beginPath();
+    ctx.moveTo(laser.x1, laser.y1);
+    ctx.lineTo(laser.x2, laser.y2);
+    ctx.stroke();
+
+    // High-speed directional energy pulses marching along the white core
+    ctx.save();
+    ctx.strokeStyle = PALETTE.bg;
+    ctx.lineWidth = Math.max(1.5, currentHalfW * (isIgnitionFlash ? 0.9 : 0.58));
+    ctx.setLineDash([14, 18]);
+    ctx.lineDashOffset = -(activeElapsed * 0.65);
+    ctx.beginPath();
+    ctx.moveTo(laser.x1, laser.y1);
+    ctx.lineTo(laser.x2, laser.y2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Continuous center core thread
+    ctx.strokeStyle = PALETTE.bg;
+    ctx.lineWidth = Math.max(0.8, currentHalfW * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(laser.x1, laser.y1);
+    ctx.lineTo(laser.x2, laser.y2);
+    ctx.stroke();
+  }
+}
+
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -385,38 +481,7 @@ export class CanvasRenderer {
   }
 
   private renderLaser(ctx: CanvasRenderingContext2D, laser: LaserHazard): void {
-    if (laser.elapsedMs < 0) return;
-    const phase = getLaserPhase(laser);
-    if (phase === 'WARNING') {
-      const drawProgress = Math.min(1, laser.elapsedMs / 140);
-      const ex = laser.x1 + (laser.x2 - laser.x1) * drawProgress;
-      const ey = laser.y1 + (laser.y2 - laser.y1) * drawProgress;
-      const imminence = laser.elapsedMs / laser.warningDurationMs;
-
-      ctx.save();
-      ctx.strokeStyle = PALETTE.danger;
-      ctx.lineWidth = imminence > 0.78 ? 2.0 : 1.2;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(laser.x1, laser.y1);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
-      ctx.restore();
-    } else if (phase === 'ACTIVE') {
-      ctx.strokeStyle = PALETTE.danger;
-      ctx.lineWidth = laser.halfWidth * 2;
-      ctx.beginPath();
-      ctx.moveTo(laser.x1, laser.y1);
-      ctx.lineTo(laser.x2, laser.y2);
-      ctx.stroke();
-
-      ctx.strokeStyle = PALETTE.bg;
-      ctx.lineWidth = Math.max(1.8, laser.halfWidth * 0.45);
-      ctx.beginPath();
-      ctx.moveTo(laser.x1, laser.y1);
-      ctx.lineTo(laser.x2, laser.y2);
-      ctx.stroke();
-    }
+    renderLaserHazard(ctx, laser);
   }
 
   private renderBullet(ctx: CanvasRenderingContext2D, bullet: BulletHazard): void {

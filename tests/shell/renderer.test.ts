@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { CORE_RADIUS, LOGICAL_WIDTH } from '../../src/core/types';
-import { PALETTE, renderPlayerShipAndRing } from '../../src/shell/renderer';
+import { CORE_RADIUS, LOGICAL_WIDTH, type LaserHazard } from '../../src/core/types';
+import { PALETTE, renderLaserHazard, renderPlayerShipAndRing } from '../../src/shell/renderer';
 
 interface RecordedCall {
   readonly method: string;
   readonly args: readonly unknown[];
   readonly strokeStyle: string;
   readonly fillStyle: string;
+  readonly lineWidth: number;
+  readonly lineDashOffset: number;
   readonly textAlign: CanvasTextAlign;
 }
 
@@ -17,10 +19,20 @@ function createRecordingContext(): {
   const calls: RecordedCall[] = [];
   let strokeStyle = '#000000';
   let fillStyle = '#000000';
+  let lineWidth = 1;
+  let lineDashOffset = 0;
   let textAlign: CanvasTextAlign = 'start';
 
   const record = (method: string, ...args: unknown[]) => {
-    calls.push({ method, args, strokeStyle, fillStyle, textAlign });
+    calls.push({
+      method,
+      args,
+      strokeStyle,
+      fillStyle,
+      lineWidth,
+      lineDashOffset,
+      textAlign,
+    });
   };
 
   const mock = {
@@ -36,13 +48,24 @@ function createRecordingContext(): {
     set fillStyle(v: string) {
       fillStyle = v;
     },
+    get lineWidth() {
+      return lineWidth;
+    },
+    set lineWidth(v: number) {
+      lineWidth = v;
+    },
+    get lineDashOffset() {
+      return lineDashOffset;
+    },
+    set lineDashOffset(v: number) {
+      lineDashOffset = v;
+    },
     get textAlign() {
       return textAlign;
     },
     set textAlign(v: CanvasTextAlign) {
       textAlign = v;
     },
-    lineWidth: 1,
     font: '',
     textBaseline: 'alphabetic',
     globalAlpha: 1,
@@ -118,5 +141,66 @@ describe('minimal geometric renderer', () => {
     renderPlayerShipAndRing(rightEdge.ctx, LOGICAL_WIDTH - 20, 320, 3, 12.5, 0.8, 500);
     const rightEdgeText = rightEdge.calls.find((c) => c.method === 'fillText');
     expect(rightEdgeText?.textAlign).toBe('right');
+  });
+
+  it('animates laser direction with converging lock-on corridor + marching dashes in WARNING and ignition spike + flowing core pulses + tapered collapse in ACTIVE', () => {
+    const baseLaser: LaserHazard = {
+      id: 'l-anim',
+      kind: 'LASER',
+      x1: 0,
+      y1: 200,
+      x2: 360,
+      y2: 360,
+      halfWidth: 6,
+      elapsedMs: 300,
+      warningDurationMs: 950,
+      activeDurationMs: 650,
+      grazeTimerMs: 0,
+    };
+
+    // 1. WARNING early (elapsedMs = 300) vs late lock-on snap (elapsedMs = 880)
+    const warnEarly = createRecordingContext();
+    renderLaserHazard(warnEarly.ctx, { ...baseLaser, elapsedMs: 300 });
+    const warnLate = createRecordingContext();
+    renderLaserHazard(warnLate.ctx, { ...baseLaser, elapsedMs: 880 });
+
+    const earlyStrokes = warnEarly.calls.filter((c) => c.method === 'stroke');
+    const lateStrokes = warnLate.calls.filter((c) => c.method === 'stroke');
+    expect(earlyStrokes.length).toBeGreaterThanOrEqual(2);
+    expect(lateStrokes.length).toBeGreaterThanOrEqual(2);
+
+    // First stroke is the lock-on corridor (full width 12px early, snapped narrower late)
+    expect(earlyStrokes[0].lineWidth).toBeCloseTo(12, 3);
+    expect(lateStrokes[0].lineWidth).toBeLessThan(earlyStrokes[0].lineWidth);
+
+    // Second stroke is the marching dashed line with negative lineDashOffset advancing with time
+    expect(earlyStrokes[1].lineDashOffset).toBeLessThan(0);
+    expect(lateStrokes[1].lineDashOffset).toBeLessThan(earlyStrokes[1].lineDashOffset);
+
+    // 2. ACTIVE ignition flash (elapsedMs = 970 -> activeElapsed = 20ms < 75ms)
+    const activeIgnition = createRecordingContext();
+    renderLaserHazard(activeIgnition.ctx, { ...baseLaser, elapsedMs: 970 });
+    const ignitionStrokes = activeIgnition.calls.filter((c) => c.method === 'stroke');
+    // Includes dark outer rim (PALETTE.fg) and spiked crimson beam (> halfWidth * 2 = 12)
+    expect(ignitionStrokes.some((s) => s.strokeStyle === PALETTE.fg)).toBe(true);
+    const ignitionCrimson = ignitionStrokes.find((s) => s.strokeStyle === PALETTE.danger);
+    expect(ignitionCrimson?.lineWidth).toBeGreaterThan(12);
+
+    // 3. ACTIVE mid-beam (elapsedMs = 1200 -> activeElapsed = 250ms)
+    const activeMid = createRecordingContext();
+    renderLaserHazard(activeMid.ctx, { ...baseLaser, elapsedMs: 1200 });
+    const midStrokes = activeMid.calls.filter((c) => c.method === 'stroke');
+    const flowingPulseStroke = midStrokes.find(
+      (s) => s.strokeStyle === PALETTE.bg && s.lineDashOffset < 0
+    );
+    expect(flowingPulseStroke).toBeDefined();
+
+    // 4. ACTIVE tapered collapse (elapsedMs = 1560 -> activeElapsed = 610ms > 530ms)
+    const activeTail = createRecordingContext();
+    renderLaserHazard(activeTail.ctx, { ...baseLaser, elapsedMs: 1560 });
+    const tailCrimson = activeTail.calls
+      .filter((c) => c.method === 'stroke')
+      .find((s) => s.strokeStyle === PALETTE.danger);
+    expect(tailCrimson?.lineWidth).toBeLessThan(12);
   });
 });

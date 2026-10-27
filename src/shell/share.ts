@@ -1,4 +1,4 @@
-import { getBombPhase, getLaserPhase } from '../core/hazards';
+import { getBombPhase } from '../core/hazards';
 import {
   HUD_HEIGHT,
   LOGICAL_HEIGHT,
@@ -6,7 +6,6 @@ import {
   type BombHazard,
   type BulletHazard,
   type GameState,
-  type LaserHazard,
   type PeakMomentSnapshot,
   type RankingRecord,
 } from '../core/types';
@@ -14,6 +13,7 @@ import {
   drawCrossGrid,
   MONO_FONT,
   PALETTE,
+  renderLaserHazard,
   renderPlayerShipAndRing,
 } from './renderer';
 import { formatSurvivalTime } from './storage';
@@ -121,34 +121,7 @@ function renderPeakSnapshotCrop(
 
   for (const h of hazards) {
     if (h.kind === 'LASER') {
-      const l = h as LaserHazard;
-      if (l.elapsedMs < 0) continue;
-      const phase = getLaserPhase(l);
-      if (phase === 'WARNING') {
-        ctx.save();
-        ctx.strokeStyle = PALETTE.danger;
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath();
-        ctx.moveTo(l.x1, l.y1);
-        ctx.lineTo(l.x2, l.y2);
-        ctx.stroke();
-        ctx.restore();
-      } else if (phase === 'ACTIVE') {
-        ctx.strokeStyle = PALETTE.danger;
-        ctx.lineWidth = l.halfWidth * 2;
-        ctx.beginPath();
-        ctx.moveTo(l.x1, l.y1);
-        ctx.lineTo(l.x2, l.y2);
-        ctx.stroke();
-
-        ctx.strokeStyle = PALETTE.bg;
-        ctx.lineWidth = Math.max(1.6, l.halfWidth * 0.45);
-        ctx.beginPath();
-        ctx.moveTo(l.x1, l.y1);
-        ctx.lineTo(l.x2, l.y2);
-        ctx.stroke();
-      }
+      renderLaserHazard(ctx, h);
     }
   }
 
