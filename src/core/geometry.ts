@@ -88,7 +88,8 @@ export function evaluateHazardContact(
 export function computeGrazeTickReward(
   closeness: number,
   comboMultiplier: number,
-  params: GameParams = GAME_PARAMS
+  params: GameParams = GAME_PARAMS,
+  level = 0
 ): {
   readonly scoreDelta: number;
   readonly comboDelta: number;
@@ -100,11 +101,15 @@ export function computeGrazeTickReward(
     comboBaseDelta,
     comboProximityDelta,
     criticalClosenessThreshold,
+    negativeLevelComboFactor,
   } = params.scoring;
   const clamped = Math.max(0, Math.min(1, closeness));
   const proximityFactor = 1 + proximityScoreMultiplier * clamped * clamped;
   const scoreDelta = Math.round(baseTickScore * proximityFactor * comboMultiplier);
-  const comboDelta = comboBaseDelta + comboProximityDelta * clamped * clamped;
+  const rawComboDelta = comboBaseDelta + comboProximityDelta * clamped * clamped;
+  const levelSuppressionFactor =
+    level < 0 ? 1 / (1 + Math.abs(level) * negativeLevelComboFactor) : 1;
+  const comboDelta = rawComboDelta * levelSuppressionFactor;
   const isCritical = clamped >= criticalClosenessThreshold;
   return {
     scoreDelta,

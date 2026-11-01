@@ -118,4 +118,18 @@ describe('geometry & graze evaluation', () => {
     expect(inner.comboDelta).toBeCloseTo(0.35, 5);
     expect(inner.isCritical).toBe(true);
   });
+
+  it('suppresses combo delta when threat level is negative using inverse scaling', () => {
+    const baseReward = computeGrazeTickReward(0, 1.0, undefined, 0);
+    const neg1Reward = computeGrazeTickReward(0, 1.0, undefined, -1);
+    const neg2Reward = computeGrazeTickReward(0, 1.0, undefined, -2);
+    const neg5Reward = computeGrazeTickReward(0, 1.0, undefined, -5);
+    const pos1Reward = computeGrazeTickReward(0, 1.0, undefined, 1);
+
+    expect(neg1Reward.comboDelta).toBeCloseTo(baseReward.comboDelta / 2, 5);
+    expect(neg2Reward.comboDelta).toBeCloseTo(baseReward.comboDelta / 3, 5);
+    expect(neg5Reward.comboDelta).toBeCloseTo(baseReward.comboDelta / 6, 5);
+    expect(pos1Reward.comboDelta).toBeCloseTo(baseReward.comboDelta, 5);
+    expect(neg1Reward.scoreDelta).toBe(baseReward.scoreDelta);
+  });
 });
