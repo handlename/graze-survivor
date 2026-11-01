@@ -349,6 +349,7 @@ function createSleepingBullet(
     elapsedMs: -totalWarningMs,
     warningDurationMs: totalWarningMs,
     grazeTimerMs: 0,
+    grazeCount: 0,
   };
 }
 

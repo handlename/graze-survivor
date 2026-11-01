@@ -24,6 +24,7 @@ describe('geometry & graze evaluation', () => {
       elapsedMs: 0,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     // Center distance = 6 <= CORE_RADIUS(3) + radius(4) = 7 -> HIT
     expect(evaluateHazardContact(100, 206, bullet)).toEqual({ kind: 'HIT' });

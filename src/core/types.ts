@@ -38,6 +38,7 @@ export interface BulletHazard {
   readonly elapsedMs: number;
   readonly warningDurationMs: number;
   readonly grazeTimerMs: number;
+  readonly grazeCount: number;
 }
 
 export interface BombHazard {

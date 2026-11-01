@@ -15,6 +15,7 @@ describe('computeBulletTelegraphProjection & renderBulletHazard', () => {
       elapsedMs: -275,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     const backBullet: BulletHazard = {
       id: 'b-1',
@@ -27,6 +28,7 @@ describe('computeBulletTelegraphProjection & renderBulletHazard', () => {
       elapsedMs: -365,
       warningDurationMs: 640,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
 
     const p0 = computeBulletTelegraphProjection(frontBullet);
@@ -50,6 +52,7 @@ describe('computeBulletTelegraphProjection & renderBulletHazard', () => {
       elapsedMs: -50,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     const proj = computeBulletTelegraphProjection(imminentBullet);
     expect(proj.progress).toBeGreaterThan(0.78);

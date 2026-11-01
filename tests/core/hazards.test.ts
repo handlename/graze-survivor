@@ -9,7 +9,7 @@ import {
   spawnLaserFormation,
   stepHazards,
 } from '../../src/core/hazards';
-import { HUD_HEIGHT, LOGICAL_HEIGHT, LOGICAL_WIDTH, type BombHazard } from '../../src/core/types';
+import { HUD_HEIGHT, LOGICAL_HEIGHT, LOGICAL_WIDTH, type BombHazard, type BulletHazard } from '../../src/core/types';
 
 describe('hazards lifecycle and continuous spawners', () => {
   it('progresses bomb through single CONVERGING -> HOLD -> ACTIVE -> EXPIRED lifecycle', () => {
@@ -251,5 +251,22 @@ describe('hazards lifecycle and continuous spawners', () => {
     const lvPlus10AtStart = computeThreatLevel(0, undefined, 10);
     const lv0After150s = computeThreatLevel(150_000, undefined, 0);
     expect(lvPlus10AtStart).toEqual(lv0After150s);
+  });
+
+  it('initializes bullet hazard with grazeCount = 0 and preserves it during stepHazards', () => {
+    const threat = computeThreatLevel(0);
+    const bullets = spawnBulletStream(threat, { x: 180, y: 320 }, 'test', () => 0.5);
+    expect(bullets.length).toBeGreaterThan(0);
+    for (const b of bullets) {
+      expect(b.grazeCount).toBe(0);
+    }
+
+    const customBullet: BulletHazard = {
+      ...bullets[0],
+      grazeCount: 5,
+      elapsedMs: 100,
+    };
+    const [stepped] = stepHazards([customBullet], 50) as BulletHazard[];
+    expect(stepped.grazeCount).toBe(5);
   });
 });

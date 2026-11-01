@@ -76,6 +76,7 @@ describe('core game engine loop', () => {
       elapsedMs: 0,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     const readyToSpawn = {
       ...initial,
@@ -106,6 +107,7 @@ describe('core game engine loop', () => {
       elapsedMs: 0,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     const stateAt2Lives = {
       ...initial,
@@ -138,6 +140,7 @@ describe('core game engine loop', () => {
         elapsedMs: 0,
         warningDurationMs: 550,
         grazeTimerMs: 0,
+        grazeCount: 0,
       },
       {
         id: 'hit-bullet',
@@ -150,6 +153,7 @@ describe('core game engine loop', () => {
         elapsedMs: 0,
         warningDurationMs: 550,
         grazeTimerMs: 0,
+        grazeCount: 0,
       },
     ];
     const state = {

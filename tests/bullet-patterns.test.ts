@@ -24,6 +24,7 @@ describe('BulletHazard Telegraph Lifecycle & 10 Patterns', () => {
       elapsedMs: -200,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     expect(getBulletPhase(sleepingBullet)).toBe('WARNING');
     expect(evaluateHazardContact(180, 300, sleepingBullet)).toEqual({ kind: 'NONE' });
@@ -42,6 +43,7 @@ describe('BulletHazard Telegraph Lifecycle & 10 Patterns', () => {
       elapsedMs: -10,
       warningDurationMs: 550,
       grazeTimerMs: 0,
+      grazeCount: 0,
     };
     const [stepped] = stepHazards([b], 25) as BulletHazard[];
     expect(stepped.elapsedMs).toBe(15);
