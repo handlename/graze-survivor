@@ -22,21 +22,58 @@ import { formatSurvivalTime } from './storage';
 export const PUBLIC_GAME_URL = 'https://handlename.github.io/graze-survivor/';
 
 const CARD_FRAME = { x: 10, y: 10, w: 580, h: 380 } as const;
+const PEAK_SCALE = 1.35;
 const PEAK_AREA_LEFT = 210;
-const PEAK_GRAD_END = 375;
+const PEAK_GRAD_END = 365;
 const PEAK_CENTER_X = 455;
 const PEAK_CENTER_Y = 200;
+const PLAYER_MIN_CARD_X = 338;
+const PLAYER_MAX_CARD_X = 579;
+const PLAYER_MIN_CARD_Y = 21;
+const PLAYER_MAX_CARD_Y = 379;
+
+export function computeClampedPeakCamera(playerX: number, playerY: number): {
+  readonly camX: number;
+  readonly camY: number;
+} {
+  const innerTop = CARD_FRAME.y + 1;
+  const innerBottom = CARD_FRAME.y + CARD_FRAME.h - 1;
+  const innerRight = CARD_FRAME.x + CARD_FRAME.w - 1;
+
+  // Priority 2 bounds: playfield [0..LOGICAL_WIDTH] x [HUD_HEIGHT..LOGICAL_HEIGHT] covers the peak display area
+  const p2MinCamX = (PEAK_CENTER_X - PEAK_AREA_LEFT) / PEAK_SCALE;
+  const p2MaxCamX = LOGICAL_WIDTH - (innerRight - PEAK_CENTER_X) / PEAK_SCALE;
+  const p2MinCamY = HUD_HEIGHT + (PEAK_CENTER_Y - innerTop) / PEAK_SCALE;
+  const p2MaxCamY = LOGICAL_HEIGHT - (innerBottom - PEAK_CENTER_Y) / PEAK_SCALE;
+
+  // Priority 1 bounds: player ship must stay inside the right half of the result card
+  const p1MinCamX = playerX - (PLAYER_MAX_CARD_X - PEAK_CENTER_X) / PEAK_SCALE;
+  const p1MaxCamX = playerX + (PEAK_CENTER_X - PLAYER_MIN_CARD_X) / PEAK_SCALE;
+  const p1MinCamY = playerY - (PLAYER_MAX_CARD_Y - PEAK_CENTER_Y) / PEAK_SCALE;
+  const p1MaxCamY = playerY + (PEAK_CENTER_Y - PLAYER_MIN_CARD_Y) / PEAK_SCALE;
+
+  // Apply in priority order: start from Priority 3 (player at center), clamp to Priority 2, then enforce Priority 1
+  const p2CamX = Math.max(p2MinCamX, Math.min(p2MaxCamX, playerX));
+  const p2CamY = Math.max(p2MinCamY, Math.min(p2MaxCamY, playerY));
+
+  return {
+    camX: Math.max(p1MinCamX, Math.min(p1MaxCamX, p2CamX)),
+    camY: Math.max(p1MinCamY, Math.min(p1MaxCamY, p2CamY)),
+  };
+}
 
 function renderPeakSnapshotCrop(
   ctx: CanvasRenderingContext2D,
   snapshot: PeakMomentSnapshot | null,
   fallbackState: GameState
 ): void {
-  const rightAreaW = CARD_FRAME.x + CARD_FRAME.w - PEAK_AREA_LEFT;
+  const innerTop = CARD_FRAME.y + 1;
+  const innerRight = CARD_FRAME.x + CARD_FRAME.w - 1;
+  const innerH = CARD_FRAME.h - 2;
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(PEAK_AREA_LEFT, CARD_FRAME.y, rightAreaW, CARD_FRAME.h);
+  ctx.rect(PEAK_AREA_LEFT, innerTop, innerRight - PEAK_AREA_LEFT, innerH);
   ctx.clip();
 
   const player = snapshot ? snapshot.player : fallbackState.player;
@@ -45,25 +82,28 @@ function renderPeakSnapshotCrop(
   const popups = snapshot ? snapshot.popups : fallbackState.popups;
   const combo = snapshot ? snapshot.comboMultiplier : fallbackState.maxCombo;
   const animTimeMs = snapshot ? snapshot.timeMs : fallbackState.survivalTimeMs;
+  const { camX, camY } = computeClampedPeakCamera(player.x, player.y);
 
   ctx.save();
   ctx.translate(PEAK_CENTER_X, PEAK_CENTER_Y);
-  ctx.scale(1, 1);
-  ctx.translate(-player.x, -player.y);
+  ctx.scale(PEAK_SCALE, PEAK_SCALE);
+  ctx.translate(-camX, -camY);
 
-  // Clip strictly to the logical playfield so grid ticks and hazards never bleed outside playfield bounds
+  // Intersect playfield bounds with the card inner frame in playfield coordinates so WebKit GPU Canvas never overflows innerRight (589)
+  const innerBottom = CARD_FRAME.y + CARD_FRAME.h - 1;
+  const clipLeft = Math.max(0, camX + (PEAK_AREA_LEFT - PEAK_CENTER_X) / PEAK_SCALE);
+  const clipTop = Math.max(HUD_HEIGHT, camY + (innerTop - PEAK_CENTER_Y) / PEAK_SCALE);
+  const clipRight = Math.min(LOGICAL_WIDTH, camX + (innerRight - PEAK_CENTER_X) / PEAK_SCALE);
+  const clipBottom = Math.min(LOGICAL_HEIGHT, camY + (innerBottom - PEAK_CENTER_Y) / PEAK_SCALE);
+
   ctx.beginPath();
-  ctx.rect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
+  ctx.rect(clipLeft, clipTop, Math.max(0, clipRight - clipLeft), Math.max(0, clipBottom - clipTop));
   ctx.clip();
 
   ctx.fillStyle = PALETTE.bg;
   ctx.fillRect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
 
   drawCrossGrid(ctx, LOGICAL_WIDTH, LOGICAL_HEIGHT, HUD_HEIGHT);
-
-  ctx.strokeStyle = 'rgba(17, 17, 17, 0.22)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0.5, HUD_HEIGHT + 0.5, LOGICAL_WIDTH - 1, LOGICAL_HEIGHT - HUD_HEIGHT - 1);
 
   for (const h of hazards) {
     if (h.kind === 'BOMB') {
@@ -76,14 +116,13 @@ function renderPeakSnapshotCrop(
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.save();
         ctx.strokeStyle = PALETTE.danger;
         ctx.lineWidth = 1.2;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.restore();
+        ctx.setLineDash([]);
 
         ctx.strokeStyle = PALETTE.danger;
         ctx.lineWidth = 1;
@@ -96,14 +135,13 @@ function renderPeakSnapshotCrop(
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.save();
         ctx.strokeStyle = PALETTE.danger;
         ctx.lineWidth = 1.6;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.blastRadius, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.restore();
+        ctx.setLineDash([]);
       } else if (info.phase === 'ACTIVE') {
         ctx.fillStyle = PALETTE.danger;
         ctx.globalAlpha = 0.85;
@@ -154,24 +192,33 @@ function renderPeakSnapshotCrop(
 
   ctx.restore();
 
-  // Smooth paper gradient overlay on the left side of the snapshot to preserve left column readability
+  // Smooth paper gradient overlay on the left side of the snapshot to completely hide the playfield left edge and preserve left column readability
+  const playfieldLeftCardX = PEAK_CENTER_X - camX * PEAK_SCALE;
+  const gradEnd = Math.max(PEAK_GRAD_END, Math.ceil(playfieldLeftCardX) + 42);
+  const solidCoverEndX = Math.max(PEAK_AREA_LEFT + 28, Math.ceil(playfieldLeftCardX) + 6);
+  const solidStopOffset = Math.max(
+    0.16,
+    Math.min(0.78, (solidCoverEndX - PEAK_AREA_LEFT) / (gradEnd - PEAK_AREA_LEFT))
+  );
+
   if (typeof ctx.createLinearGradient === 'function') {
-    const grad = ctx.createLinearGradient(PEAK_AREA_LEFT, 0, PEAK_GRAD_END, 0);
+    const grad = ctx.createLinearGradient(PEAK_AREA_LEFT, 0, gradEnd, 0);
     grad.addColorStop(0, 'rgba(244, 244, 240, 1.0)');
-    grad.addColorStop(0.55, 'rgba(244, 244, 240, 0.82)');
+    grad.addColorStop(solidStopOffset, 'rgba(244, 244, 240, 1.0)');
+    grad.addColorStop(solidStopOffset + (1 - solidStopOffset) * 0.5, 'rgba(244, 244, 240, 0.68)');
     grad.addColorStop(1, 'rgba(244, 244, 240, 0.0)');
     ctx.fillStyle = grad;
   } else {
-    ctx.fillStyle = 'rgba(244, 244, 240, 0.82)';
+    ctx.fillStyle = 'rgba(244, 244, 240, 0.85)';
   }
-  ctx.fillRect(PEAK_AREA_LEFT, CARD_FRAME.y, PEAK_GRAD_END - PEAK_AREA_LEFT, CARD_FRAME.h);
+  ctx.fillRect(PEAK_AREA_LEFT, innerTop, gradEnd - PEAK_AREA_LEFT, innerH);
 
   // Bottom-right peak caption badge inside card frame
   const badgeW = 196;
   const badgeH = 40;
   const bx = CARD_FRAME.x + CARD_FRAME.w - badgeW - 14;
   const by = CARD_FRAME.y + CARD_FRAME.h - badgeH - 12;
-  ctx.fillStyle = 'rgba(244, 244, 240, 0.92)';
+  ctx.fillStyle = PALETTE.bg;
   ctx.fillRect(bx, by, badgeW, badgeH);
   ctx.strokeStyle = PALETTE.fg;
   ctx.lineWidth = 1;
@@ -274,7 +321,13 @@ export function renderResultCardCanvas(
   ctx.font = `700 18px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif`;
   ctx.fillText('GRAZE SURVIVOR', 28, 356);
 
-  // Outer Frame drawn last so nothing ever overflows it
+  // Mask outer margins outside CARD_FRAME and draw Outer Frame last so nothing ever overflows it
+  ctx.fillStyle = PALETTE.bg;
+  ctx.fillRect(0, 0, 600, CARD_FRAME.y);
+  ctx.fillRect(0, CARD_FRAME.y + CARD_FRAME.h, 600, 400 - (CARD_FRAME.y + CARD_FRAME.h));
+  ctx.fillRect(0, 0, CARD_FRAME.x, 400);
+  ctx.fillRect(CARD_FRAME.x + CARD_FRAME.w, 0, 600 - (CARD_FRAME.x + CARD_FRAME.w), 400);
+
   ctx.strokeStyle = PALETTE.fg;
   ctx.lineWidth = 2;
   ctx.strokeRect(CARD_FRAME.x, CARD_FRAME.y, CARD_FRAME.w, CARD_FRAME.h);

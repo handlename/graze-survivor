@@ -7,7 +7,10 @@ import {
   type GameState,
   type RankingRecord,
 } from '../src/core/types';
-import { renderResultCardCanvas } from '../src/shell/share';
+import {
+  computeClampedPeakCamera,
+  renderResultCardCanvas,
+} from '../src/shell/share';
 
 interface RecordedOp {
   readonly op: string;
@@ -69,7 +72,7 @@ function setupMockCanvasDocument() {
   return { ops, gradientStops, mockCanvas, mockCtx };
 }
 
-describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.0x player-centered with left gradient)', () => {
+describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.35x player-centered with left gradient)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -82,7 +85,7 @@ describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.0x player-cente
     timestamp: '2026-11-01 17:20:00',
   };
 
-  it('renders peak moment at uniform 1:1 (1.0x) scale centered on the player at (455, 200)', () => {
+  it('renders peak moment at uniform 1.35x scale and clamps camera so playfield always fills the designated peak region', () => {
     const { ops } = setupMockCanvasDocument();
     const baseState = createInitialGameState();
     const state: GameState = {
@@ -92,22 +95,22 @@ describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.0x player-cente
         windowScoreRatePerSec: 18420,
         comboMultiplier: 4.8,
         player: {
-          x: 42,
-          y: 96,
+          x: 200,
+          y: 348,
           invulnerableMs: 0,
-          trail: [{ x: 42, y: 96 }],
+          trail: [{ x: 200, y: 348 }],
         },
         hazards: [
           {
             id: 'b1',
-            kind: 'BULLET',
+            kind: 'BOMB',
             x: 60,
-            y: 100,
-            vx: -100,
-            vy: 0,
-            radius: 4,
-            elapsedMs: 50,
-            warningDurationMs: 400,
+            y: 340,
+            blastRadius: 48,
+            elapsedMs: 100,
+            convergeDurationMs: 420,
+            holdDurationMs: 680,
+            activeDurationMs: 450,
             grazeTimerMs: 0,
           },
         ],
@@ -121,64 +124,98 @@ describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.0x player-cente
     const scaleOps = ops.filter((o) => o.op === 'scale');
     expect(scaleOps.length).toBeGreaterThanOrEqual(1);
     for (const s of scaleOps) {
-      expect(s.args[0]).toBe(1);
-      expect(s.args[1]).toBe(1);
+      expect(s.args[0]).toBe(1.35);
+      expect(s.args[1]).toBe(1.35);
     }
 
     const translateOps = ops.filter((o) => o.op === 'translate');
     expect(translateOps).toContainEqual({ op: 'translate', args: [455, 200] });
-    expect(translateOps).toContainEqual({ op: 'translate', args: [-42, -96] });
+    expect(translateOps).toContainEqual({ op: 'translate', args: [-200, -348] });
+
+    // Verify 3-tier priority rules across extreme and central player positions:
+    // Priority 1: Player always stays inside the right half of the result card (cardX in [338..579], cardY in [21..379])
+    // Priority 2: Within Priority 1, playfield fills the peak display area (top <= 11, bottom >= 389, right >= 589, and left <= 210 whenever playerX >= 87)
+    // Priority 3: Within Priorities 1 & 2, player is centered at (455, 200)
+    const testPositions = [
+      { x: 8, y: HUD_HEIGHT + 8 },
+      { x: LOGICAL_WIDTH - 8, y: LOGICAL_HEIGHT - 8 },
+      { x: 20, y: 600 },
+      { x: 330, y: 80 },
+      { x: 180, y: 348 },
+      { x: 200, y: 348 },
+    ];
+    for (const pos of testPositions) {
+      const { camX, camY } = computeClampedPeakCamera(pos.x, pos.y);
+      const playerCardX = 455 + (pos.x - camX) * 1.35;
+      const playerCardY = 200 + (pos.y - camY) * 1.35;
+      const cardLeftX = 455 + (0 - camX) * 1.35;
+      const cardRightX = 455 + (LOGICAL_WIDTH - camX) * 1.35;
+      const cardTopY = 200 + (HUD_HEIGHT - camY) * 1.35;
+      const cardBottomY = 200 + (LOGICAL_HEIGHT - camY) * 1.35;
+
+      // Priority 1: Player always inside right half of card
+      expect(playerCardX).toBeGreaterThanOrEqual(337.999);
+      expect(playerCardX).toBeLessThanOrEqual(579.001);
+      expect(playerCardY).toBeGreaterThanOrEqual(20.999);
+      expect(playerCardY).toBeLessThanOrEqual(379.001);
+
+      // Priority 2: Top, bottom, and right borders always filled; left filled whenever Priority 1 permits
+      expect(cardRightX).toBeGreaterThanOrEqual(588.999);
+      expect(cardTopY).toBeLessThanOrEqual(11.001);
+      expect(cardBottomY).toBeGreaterThanOrEqual(388.999);
+      if (pos.x >= 87) {
+        expect(cardLeftX).toBeLessThanOrEqual(210.001);
+      }
+    }
+
+    // Priority 3: Central player (200, 348) is placed at exact center (455, 200)
+    const centered = computeClampedPeakCamera(200, 348);
+    expect(455 + (200 - centered.camX) * 1.35).toBeCloseTo(455, 5);
+    expect(200 + (348 - centered.camY) * 1.35).toBeCloseTo(200, 5);
   });
 
-  it('clips strictly to right card region (210, 10, 380, 380) and playfield world (0, 56, 360, 584), applies left paper gradient (210..375), and draws outer border last', () => {
+  it('clips strictly inside card border, does not draw an inner playfield border line that shows through the gradient, and fully masks the left playfield edge', () => {
     const { ops, gradientStops } = setupMockCanvasDocument();
     const state = createInitialGameState();
 
     renderResultCardCanvas(state, sampleRecord, false);
 
-    // Card right-region clip and playfield world clip
+    // Clips strictly inside the 2px outer frame (10, 10, 580, 380) -> y: 11..389, x: 210..589
     const rectOps = ops.filter((o) => o.op === 'rect');
-    expect(rectOps).toContainEqual({ op: 'rect', args: [210, 10, 380, 380] });
-    expect(rectOps).toContainEqual({
-      op: 'rect',
-      args: [0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT],
-    });
+    expect(rectOps).toContainEqual({ op: 'rect', args: [210, 11, 379, 378] });
+    expect(rectOps.length).toBeGreaterThanOrEqual(2);
 
-    // Left paper gradient overlay from x=210 to x=375
-    const gradIndex = ops.findIndex(
-      (o) =>
-        o.op === 'createLinearGradient' &&
-        o.args[0] === 210 &&
-        o.args[1] === 0 &&
-        o.args[2] === 375 &&
-        o.args[3] === 0
+    // Outer margins outside CARD_FRAME are masked with paper background before drawing the outer border
+    const fillRectOps = ops.filter((o) => o.op === 'fillRect');
+    expect(fillRectOps).toContainEqual({ op: 'fillRect', args: [590, 0, 10, 400] });
+    expect(fillRectOps).toContainEqual({ op: 'fillRect', args: [0, 0, 600, 10] });
+    expect(fillRectOps).toContainEqual({ op: 'fillRect', args: [0, 390, 600, 10] });
+    expect(fillRectOps).toContainEqual({ op: 'fillRect', args: [0, 0, 10, 400] });
+
+    // No inner playfield strokeRect(0.5, 56.5, ...) should be drawn inside the peak snapshot
+    const playfieldBorderStroke = ops.find(
+      (o) => o.op === 'strokeRect' && o.args[0] === 0.5 && o.args[1] === HUD_HEIGHT + 0.5
     );
+    expect(playfieldBorderStroke).toBeUndefined();
+
+    // Left paper gradient overlay completely hides the left edge before fading out
+    const gradIndex = ops.findIndex((o) => o.op === 'createLinearGradient');
     expect(gradIndex).toBeGreaterThan(-1);
-    expect(gradientStops.length).toBeGreaterThanOrEqual(2);
     expect(gradientStops[0]).toEqual({ offset: 0, color: 'rgba(244, 244, 240, 1.0)' });
+    expect(gradientStops.some((s) => s.offset > 0 && s.color === 'rgba(244, 244, 240, 1.0)')).toBe(
+      true
+    );
     expect(gradientStops[gradientStops.length - 1]).toEqual({
       offset: 1,
       color: 'rgba(244, 244, 240, 0.0)',
     });
 
-    const gradFillIndex = ops.findIndex(
-      (o, idx) =>
-        idx > gradIndex &&
-        o.op === 'fillRect' &&
-        o.args[0] === 210 &&
-        o.args[1] === 10 &&
-        o.args[2] === 165 &&
-        o.args[3] === 380
-    );
-    expect(gradFillIndex).toBeGreaterThan(gradIndex);
-
-    // Final score text is drawn AFTER the gradient overlay so left text is never faded
+    // Final score text and outer card border are drawn after the snapshot and gradient
     const scoreTextIndex = ops.findIndex(
       (o) => o.op === 'fillText' && o.args[0] === '148,920'
     );
-    expect(scoreTextIndex).toBeGreaterThan(gradFillIndex);
+    expect(scoreTextIndex).toBeGreaterThan(gradIndex);
 
-    // Outer card frame strokeRect(10, 10, 580, 380) is the last strokeRect operation
     const outerFrameIndex = ops.findIndex(
       (o) =>
         o.op === 'strokeRect' &&
