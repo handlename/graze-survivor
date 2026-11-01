@@ -242,9 +242,10 @@ describe('core game engine loop', () => {
     expect(afterSpike.comboGauge).toBeGreaterThan(0.95);
   });
 
-  it('selects fixed first-play tip on initial run and random tip from 20 Japanese tips afterwards', () => {
-    expect(GAME_TIPS).toHaveLength(20);
-    expect(new Set(GAME_TIPS).size).toBe(20);
+  it('selects fixed first-play tip on initial run and random tip from 21 Japanese tips afterwards', () => {
+    expect(GAME_TIPS).toHaveLength(21);
+    expect(new Set(GAME_TIPS).size).toBe(21);
+    expect(GAME_TIPS.some((tip) => tip.includes('通常弾') && tip.includes('上限'))).toBe(true);
 
     const firstPlayTip = selectPreGameTip(false, () => 0.95);
     expect(firstPlayTip).toBe(GAME_TIPS[0]);
