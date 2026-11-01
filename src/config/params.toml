@@ -1,0 +1,217 @@
+# ==============================================================================
+# GRAZE SURVIVOR - ゲームバランス・弾幕・演出パラメータ設定
+# ==============================================================================
+# 弾幕の出現間隔、パターン形状、自機判定、スコア計算、画面演出のパラメータを定義します。
+# すべての時間単位はミリ秒 (ms)、距離・サイズは論理ピクセル (360x640 基準)、角度はラジアン (rad) または度 (deg) です。
+
+[player]
+# ゲーム開始時の残機数
+initialLives = 3
+# 被弾後の無敵時間 (ms)
+invulnerableMs = 1500
+# 自機の被弾判定（コア）半径 (px)
+coreRadius = 3.0
+# グレイズ判定リングの半径 (px) ※ coreRadius より大きい値である必要があります
+grazeRadius = 24.0
+# 初期配置およびセンターリセット時のプレイフィールド内Y座標比率 (0.0 = 上端, 1.0 = 下端)
+defaultCenterYRatio = 0.6
+
+[scoring]
+# グレイズ継続時にスコア・コンボが加算される周期 (ms)
+grazeTickMs = 50
+# グレイズ1ティックあたりの基本スコア
+baseTickScore = 100
+# 弾の端に近づいた際の最大スコア倍率加算値 (1 + proximityScoreMultiplier * closeness^2 で最大4倍)
+proximityScoreMultiplier = 3.0
+# グレイズ1ティックあたりの基本コンボ倍率上昇量
+comboBaseDelta = 0.1
+# 弾の端に近づいた際のコンボ倍率追加上昇量 (comboBaseDelta + comboProximityDelta * closeness^2)
+comboProximityDelta = 0.25
+# クリティカルグレイズになる近接度 (closeness: 0.0〜1.0) の閾値
+criticalClosenessThreshold = 0.7
+# グレイズが途切れてからコンボ倍率が減衰し始めるまでの維持時間 (ms)
+comboHoldMs = 1800
+# コンボ倍率の上限値
+maxComboMultiplier = 999.9
+# コンボゲージ枯渇後の最低減衰速度 (倍率/秒)
+comboDecayMinPerSec = 2.0
+# コンボ余剰分 (comboMultiplier - 1.0) に対する減衰速度比例係数
+comboDecayExcessFactor = 0.25
+# リザルト画面「PEAK GRAZE MOMENT」算出用のスコアレート集計ウィンドウ幅 (ms)
+peakWindowMs = 500
+
+[threat]
+# ゲーム開始直後の初回スポーンまでの待機時間 (ms)
+initialBulletDelayMs = 120
+initialLaserDelayMs = 550
+initialBombDelayMs = 1250
+# 脅威レベル (level) が1段階上がる生存時間の間隔 (ms)
+levelIntervalMs = 15_000
+# スポーン間隔の短縮進行度 (progress: 0.0〜1.0) が最大に達する生存時間 (ms)
+maxProgressDurationMs = 120_000
+# 1ストリームあたりの初期弾数と、レベルに応じた増加量・上限
+baseBulletsPerStream = 5
+maxExtraBulletsPerStream = 10
+bulletsPerStreamLevelFactor = 1.4
+# 弾ストリームが同時に2つ発射されるようになる脅威レベル
+dualStreamStartLevel = 3
+# 弾ストリームの基本スポーン間隔 (ms): 開始時 -> 最大進行時
+bulletIntervalStartMs = 920
+bulletIntervalEndMs = 420
+# レーザー同時発射本数の初期値・上限・レベル除数 (baseLaserCount + floor(level / laserCountLevelDivisor))
+baseLaserCount = 2
+maxLaserCount = 5
+laserCountLevelDivisor = 2
+# レーザーの基本スポーン間隔 (ms): 開始時 -> 最大進行時
+laserIntervalStartMs = 2100
+laserIntervalEndMs = 920
+# ボム同時出現数の初期値・上限・レベルオフセット・レベル除数
+baseBombCount = 2
+maxBombCount = 5
+bombCountLevelOffset = 1
+bombCountLevelDivisor = 2
+# ボムの基本スポーン間隔 (ms): 開始時 -> 最大進行時
+bombIntervalStartMs = 1850
+bombIntervalEndMs = 780
+# 各スポーン間隔に掛けるランダムジッター倍率の最小値と変動幅 (intervalJitterMin + rng * intervalJitterRange)
+intervalJitterMin = 0.65
+intervalJitterRange = 0.7
+# ジッター適用後のスポーン間隔の下限値 (ms)
+minSpawnIntervalMs = 250
+
+[bullet]
+# 通常弾の移動速度 (px/秒) ※レベルによらず一定
+speed = 92
+# 通常弾の当たり判定半径 (px)
+radius = 4.0
+# 画面外に出た弾を消去する外周マージン (px)
+offscreenCullMargin = 180
+# 自機狙い時のターゲット座標のランダムブレ幅 (px)
+aimSpread = 90
+# 画面端スポーン辺の選択確率閾値 (0.0〜edgeTopWeight: 上, 〜edgeLeftThreshold: 左, 〜edgeRightThreshold: 右, 以降: 下)
+edgeTopWeight = 0.4
+edgeLeftThreshold = 0.68
+edgeRightThreshold = 0.9
+# 上下辺から出現する際の左右端パディング (px)
+edgeHorizontalPadding = 16
+# 左右辺から出現する際の上下端パディング (px)
+edgeVerticalPadding = 30
+# 画面境界から外側へ離してスポーンさせるオフセット距離 (px)
+edgeOutsideOffset = 8
+# パターン0 (LINE: 直線連射) の弾間隔 (px)
+lineSpacing = 13
+# パターン1 (FAN: 扇状連射) の方向数・最小列数・角度ステップ (rad)・列間隔 (px)
+fanWays = 3
+fanMinRows = 2
+fanAngleStepRad = 0.22
+fanRowSpacing = 18
+# パターン2 (SPIRAL: 螺旋スイープ) の1発ごとの角度変化量 (rad) と弾間隔 (px)
+spiralAngleStepRad = 0.085
+spiralSpacing = 13
+# パターン3 (CROSS: 交差連射) の片側あたりの最小弾数と弾間隔 (px)
+crossMinPerSide = 3
+crossSpacing = 14
+
+[laser]
+# レーザーのロックオン予兆時間 (ms)
+warningDurationMs = 950
+# レーザーの本照射（当たり判定有効）時間 (ms)
+activeDurationMs = 650
+# レーザーの半幅（太さの半分）の基準値 (px) と、奇数番目レーザーへの加算幅 (px)
+baseHalfWidth = 5.5
+alternateHalfWidthBonus = 1.0
+# レーザー基準点 (focusX, focusY) の画面端からのマージン (px)
+focusMarginX = 56
+focusMarginY = 64
+# パターン0 (PINPOINT: 一点交差) の最小交差鋭角 (deg)、最大角度ジッター (rad)、発射時間差の基準値とランダム幅 (ms)
+pinpointMinAcuteDeg = 30
+pinpointMaxJitterRad = 0.12
+pinpointStaggerBaseMs = 40
+pinpointStaggerRangeMs = 80
+# パターン1 (PARALLEL: 平行レーン) のレーン間隔 (px)、X座標クランプ端マージン (px)、Y座標クランプ許容はみ出し幅 (px)、発射時間差 (ms)
+parallelSpacing = 28
+parallelClampMarginX = 36
+parallelClampOffsetY = 16
+parallelStaggerBaseMs = 55
+parallelStaggerRangeMs = 65
+# パターン2 (CAGE: 多角形包囲) が解禁される最小レーザー本数、包囲内接円の半径 (px)、発射時間差 (ms)
+cageMinLasers = 3
+cageRadius = 38
+cageStaggerBaseMs = 45
+cageStaggerRangeMs = 75
+
+[bomb]
+# ボム爆風半径の最小値とランダム加算幅 (px)
+minBlastRadius = 30
+blastRadiusRange = 22
+# 予兆リング収束フェーズの時間 (ms)
+convergeDurationMs = 420
+# 収束完了後のホールド（点滅警告）フェーズの時間 (ms)
+holdDurationMs = 680
+# 爆発（当たり判定有効）フェーズの時間 (ms)
+activeDurationMs = 450
+# 収束フェーズ開始時の外周リング半径倍率（爆風半径に対する比率、収束完了時に 1.0 になる）
+convergeStartRingScale = 2.8
+# ボム出現位置の画面端からのマージン (px)
+marginX = 44
+marginY = 54
+# 1個目のボムを自機付近にスポーンさせる際のランダムブレ幅 (px)
+targetJitterRange = 56
+# 複数ボム同時出現時の時間差の基準値とランダム幅 (ms)
+staggerBaseMs = 70
+staggerRangeMs = 140
+
+[effects]
+# 通常被弾時の画面シェイク時間 (ms) と被弾フラッシュ時間 (ms)
+hitScreenShakeMs = 460
+hitFlashMs = 380
+# ゲームオーバー撃破演出の全体時間 (ms)、シェイク時間 (ms)、フラッシュ時間 (ms)、ハザード減速倍率
+gameOverExplosionMs = 1600
+gameOverScreenShakeMs = 900
+gameOverHitFlashMs = 700
+gameOverHazardSlowFactor = 0.35
+# クリティカルまたは複数同時グレイズ時の微振動シェイク時間 (ms)
+grazeScreenShakeMs = 90
+# 画面シェイクの最大振幅 (px)、基準振幅 (px)、基準減衰時間 (ms)
+screenShakeMaxPx = 7
+screenShakeBasePx = 6
+screenShakeRefDurationMs = 350
+# 被弾フラッシュの最大不透明度 (0.0〜1.0)
+hitFlashMaxAlpha = 0.28
+# グレイズ火花パーティクルの1ティックあたり発生数（通常 / クリティカル）、初速最小値・ランダム幅 (px/秒)、寿命 (ms)、画面内最大保持数
+grazeSparksNormal = 2
+grazeSparksCritical = 4
+grazeSparkMinSpeed = 70
+grazeSparkSpeedRange = 140
+grazeSparkDurationMs = 260
+maxSparks = 110
+# 撃破直後の大爆発パーティクルの数、初速最小値・ランダム幅 (px/秒)、寿命 (ms)
+deathBurstSparkCount = 42
+deathBurstMinSpeed = 35
+deathBurstSpeedRange = 220
+deathBurstSparkDurationMs = 1100
+# 撃破演出中の誘爆パーティクルが発生する残り時間閾値 (ms)、発生周期 (ms)、1回あたり発生数、初速最小値・ランダム幅 (px/秒)、発生位置ブレ幅 (px)、寿命 (ms)
+secondaryBurstCutoffMs = 400
+secondaryBurstIntervalMs = 180
+secondaryBurstSparkCount = 12
+secondaryBurstMinSpeed = 40
+secondaryBurstSpeedRange = 160
+secondaryBurstSpreadPx = 16
+secondaryBurstSparkDurationMs = 650
+# スコアポップアップの最大同時表示数、上昇速度 (px/秒)、表示時間 (ms)
+maxPopups = 24
+popupRiseSpeedPxPerSec = 24
+popupDurationMs = 520
+# 自機移動軌跡（トレイル）の保持頂点数
+playerTrailLength = 12
+# 無敵時間中の自機点滅間隔 (ms) と、ボムホールド中の点滅間隔 (ms)
+invulnerableBlinkIntervalMs = 55
+bombHoldBlinkIntervalMs = 50
+# レーザー予兆ラインが伸び切るまでの描画時間 (ms) と、発射直前に内側へ収束を始める進行度閾値 (0.0〜1.0)
+laserWarningDrawDurationMs = 140
+laserWarningSnapThreshold = 0.82
+# レーザー発射直後のスパイク強調時間 (ms)、フラッシュ時間 (ms)、太さ増幅率、照射終了時の減衰ウィンドウ上限 (ms)
+laserIgnitionSpikeDurationMs = 75
+laserIgnitionFlashDurationMs = 40
+laserIgnitionWidthBoost = 0.55
+laserCollapseWindowMaxMs = 120
