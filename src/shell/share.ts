@@ -21,22 +21,23 @@ import { formatSurvivalTime } from './storage';
 
 export const PUBLIC_GAME_URL = 'https://handlename.github.io/graze-survivor/';
 
+const CARD_FRAME = { x: 10, y: 10, w: 580, h: 380 } as const;
+const PEAK_AREA_LEFT = 210;
+const PEAK_GRAD_END = 375;
+const PEAK_CENTER_X = 455;
+const PEAK_CENTER_Y = 200;
+
 function renderPeakSnapshotCrop(
   ctx: CanvasRenderingContext2D,
-  boxX: number,
-  boxY: number,
-  boxW: number,
-  boxH: number,
   snapshot: PeakMomentSnapshot | null,
   fallbackState: GameState
 ): void {
+  const rightAreaW = CARD_FRAME.x + CARD_FRAME.w - PEAK_AREA_LEFT;
+
   ctx.save();
   ctx.beginPath();
-  ctx.rect(boxX, boxY, boxW, boxH);
+  ctx.rect(PEAK_AREA_LEFT, CARD_FRAME.y, rightAreaW, CARD_FRAME.h);
   ctx.clip();
-
-  ctx.fillStyle = PALETTE.bg;
-  ctx.fillRect(boxX, boxY, boxW, boxH);
 
   const player = snapshot ? snapshot.player : fallbackState.player;
   const hazards = snapshot ? snapshot.hazards : fallbackState.hazards;
@@ -45,24 +46,24 @@ function renderPeakSnapshotCrop(
   const combo = snapshot ? snapshot.comboMultiplier : fallbackState.maxCombo;
   const animTimeMs = snapshot ? snapshot.timeMs : fallbackState.survivalTimeMs;
 
-  const cropW = 180;
-  const cropH = 260;
-  const minCenterX = cropW / 2;
-  const maxCenterX = LOGICAL_WIDTH - cropW / 2;
-  const minCenterY = HUD_HEIGHT + cropH / 2;
-  const maxCenterY = LOGICAL_HEIGHT - cropH / 2;
+  ctx.save();
+  ctx.translate(PEAK_CENTER_X, PEAK_CENTER_Y);
+  ctx.scale(1, 1);
+  ctx.translate(-player.x, -player.y);
 
-  const camX = Math.max(minCenterX, Math.min(maxCenterX, player.x));
-  const camY = Math.max(minCenterY, Math.min(maxCenterY, player.y));
+  // Clip strictly to the logical playfield so grid ticks and hazards never bleed outside playfield bounds
+  ctx.beginPath();
+  ctx.rect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
+  ctx.clip();
 
-  const scaleX = boxW / cropW;
-  const scaleY = boxH / cropH;
-
-  ctx.translate(boxX + boxW / 2, boxY + boxH / 2);
-  ctx.scale(scaleX, scaleY);
-  ctx.translate(-camX, -camY);
+  ctx.fillStyle = PALETTE.bg;
+  ctx.fillRect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
 
   drawCrossGrid(ctx, LOGICAL_WIDTH, LOGICAL_HEIGHT, HUD_HEIGHT);
+
+  ctx.strokeStyle = 'rgba(17, 17, 17, 0.22)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, HUD_HEIGHT + 0.5, LOGICAL_WIDTH - 1, LOGICAL_HEIGHT - HUD_HEIGHT - 1);
 
   for (const h of hazards) {
     if (h.kind === 'BOMB') {
@@ -153,29 +154,41 @@ function renderPeakSnapshotCrop(
 
   ctx.restore();
 
-  // Footer caption bar inside crop box
-  ctx.fillStyle = 'rgba(244, 244, 240, 0.94)';
-  ctx.fillRect(boxX, boxY + boxH - 36, boxW, 36);
+  // Smooth paper gradient overlay on the left side of the snapshot to preserve left column readability
+  if (typeof ctx.createLinearGradient === 'function') {
+    const grad = ctx.createLinearGradient(PEAK_AREA_LEFT, 0, PEAK_GRAD_END, 0);
+    grad.addColorStop(0, 'rgba(244, 244, 240, 1.0)');
+    grad.addColorStop(0.55, 'rgba(244, 244, 240, 0.82)');
+    grad.addColorStop(1, 'rgba(244, 244, 240, 0.0)');
+    ctx.fillStyle = grad;
+  } else {
+    ctx.fillStyle = 'rgba(244, 244, 240, 0.82)';
+  }
+  ctx.fillRect(PEAK_AREA_LEFT, CARD_FRAME.y, PEAK_GRAD_END - PEAK_AREA_LEFT, CARD_FRAME.h);
+
+  // Bottom-right peak caption badge inside card frame
+  const badgeW = 196;
+  const badgeH = 40;
+  const bx = CARD_FRAME.x + CARD_FRAME.w - badgeW - 14;
+  const by = CARD_FRAME.y + CARD_FRAME.h - badgeH - 12;
+  ctx.fillStyle = 'rgba(244, 244, 240, 0.92)';
+  ctx.fillRect(bx, by, badgeW, badgeH);
   ctx.strokeStyle = PALETTE.fg;
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(boxX, boxY + boxH - 36);
-  ctx.lineTo(boxX + boxW, boxY + boxH - 36);
-  ctx.stroke();
-
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(boxX, boxY, boxW, boxH);
+  ctx.strokeRect(bx, by, badgeW, badgeH);
 
   ctx.fillStyle = PALETTE.fg;
   ctx.font = `700 11px ${MONO_FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const peakRate = snapshot ? snapshot.windowScoreRatePerSec : 0;
-  ctx.fillText(`PEAK +${peakRate.toLocaleString('en-US')} PTS/s`, boxX + 8, boxY + boxH - 20);
+  ctx.fillText(`PEAK +${peakRate.toLocaleString('en-US')} PTS/s`, bx + 8, by + 16);
   ctx.fillStyle = PALETTE.fgMuted;
   ctx.font = `600 10px ${MONO_FONT}`;
   const peakTime = snapshot ? formatSurvivalTime(snapshot.timeMs) : '00:00.000';
-  ctx.fillText(`AT ${peakTime} (×${combo.toFixed(1)})`, boxX + 8, boxY + boxH - 7);
+  ctx.fillText(`AT ${peakTime} (×${combo.toFixed(1)})`, bx + 8, by + 31);
+
+  ctx.restore();
 }
 
 export function renderResultCardCanvas(
@@ -194,10 +207,8 @@ export function renderResultCardCanvas(
   ctx.fillRect(0, 0, 600, 400);
   drawCrossGrid(ctx, 600, 400, 0);
 
-  // Outer Frame
-  ctx.strokeStyle = PALETTE.fg;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(10, 10, 580, 380);
+  // Peak Moment Snapshot on the right with left-side paper gradient blend
+  renderPeakSnapshotCrop(ctx, state.peakMoment, state);
 
   // Header Badge
   ctx.textAlign = 'left';
@@ -231,7 +242,7 @@ export function renderResultCardCanvas(
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(28, 152);
-  ctx.lineTo(356, 152);
+  ctx.lineTo(330, 152);
   ctx.stroke();
 
   // Survival Time & Max Combo
@@ -244,36 +255,29 @@ export function renderResultCardCanvas(
 
   ctx.fillStyle = PALETTE.fgMuted;
   ctx.font = `600 11px ${MONO_FONT}`;
-  ctx.fillText('MAX COMBO', 210, 182);
+  ctx.fillText('MAX COMBO', 200, 182);
   ctx.fillStyle = PALETTE.danger;
   ctx.font = `700 22px ${MONO_FONT}`;
-  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 210, 210);
+  ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 200, 210);
 
   // Graze Ticks & Timestamp
   ctx.fillStyle = PALETTE.fg;
   ctx.font = `600 12px ${MONO_FONT}`;
-  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 256);
+  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 252);
 
   ctx.fillStyle = PALETTE.fgMuted;
   ctx.font = `500 12px ${MONO_FONT}`;
-  ctx.fillText(`DATE: ${record.timestamp}`, 28, 282);
+  ctx.fillText(`DATE: ${record.timestamp}`, 28, 278);
 
   // Game Title Footer
   ctx.fillStyle = PALETTE.fg;
   ctx.font = `700 18px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif`;
   ctx.fillText('GRAZE SURVIVOR', 28, 356);
 
-  const mapX = 382;
-  const mapY = 48;
-  const mapW = 190;
-  const mapH = 322;
-
-  ctx.fillStyle = PALETTE.fg;
-  ctx.font = `700 11px ${MONO_FONT}`;
-  ctx.textAlign = 'center';
-  ctx.fillText('PEAK GRAZE MOMENT', mapX + mapW / 2, mapY - 10);
-
-  renderPeakSnapshotCrop(ctx, mapX, mapY, mapW, mapH, state.peakMoment, state);
+  // Outer Frame drawn last so nothing ever overflows it
+  ctx.strokeStyle = PALETTE.fg;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(CARD_FRAME.x, CARD_FRAME.y, CARD_FRAME.w, CARD_FRAME.h);
 
   return canvas;
 }
