@@ -9,6 +9,7 @@
     - `hazards.ts`: 脅威レベル計算（`computeThreatLevel`）、ハザードの時間経過更新（`stepHazards`）、通常弾・レーザー・ボムのスポナー群。
     - `geometry.ts`: 自機コア（被弾）およびグレイズリングと各ハザードの距離・接触判定（`evaluateHazardContact`）、グレイズ報酬計算。
     - `game.ts`: 1フレームのゲーム進行（`stepGame`）と Peak Moment スナップショット記録。
+    - `tips.ts`: プレイ前Tips（`GAME_TIPS`）の選定および開始難易度計算。ゲームのルール・スコアリング・ハザード挙動・操作等の仕様変更を行った際は、ユーザーの理解を促すため、必ず `GAME_TIPS` もそれに合わせて追加・更新すること（`tests/core/game.test.ts` のTipsテストも同時に更新する）。
 - **`src/shell/` (Imperative Shell)**:
   - Canvas 2D 描画（`renderer.ts`）、リザルト画像生成・Web Share API 連携（`share.ts`）、Web Audio シンセサイザー効果音・BGM（`audio.ts`）、センサー権限（`permissions.ts`）、LocalStorage 永続化（`storage.ts`）を担当する。
 - **`src/config/params.toml`**:
@@ -30,6 +31,8 @@
   - フィールド内発射パターン（`4: RING`, `6: VORTEX`, `7: FLOWER`, `8: LATTICE`, `9: STAR`）は、自機座標から `inFieldMinSafeDistance`（`110px`）以上離れた座標をサンプリングして発射原点とする（`pickInFieldSafeSpawnPoint`）。
 5. **段階的解禁と密度スケーリング**:
   - 脅威レベル（`level`、15秒ごとに +1）に応じて `0, 1`（Lv.0+）→ `2, 3`（Lv.1+）→ `4, 5`（Lv.2+）→ `6`（Lv.3+）→ `7`（Lv.4+）→ `8`（Lv.5+）→ `9`（Lv.6+）の順に解禁し、弾数・列数・分割数を段階的に増加させる。
+6. **1発あたりのグレイズ上限 (`maxGrazeTicks`)**:
+  - 通常弾を追従してノーリスクで稼ぎ続ける行為を防止するため、通常弾1発から得られるグレイズティック数に上限（`params.bullet.maxGrazeTicks`）を設ける。上限到達後は被弾（コア接触）判定のみを残し、グレイズ判定（スコア・倍率加算、コンボゲージ維持、火花演出）は完全に打ち切る。
 
 ## 3. リザルトカード・ハイライト表示 (`share.ts`) の設計規約
 1. **アスペクト比保持と均一スケーリング**:
