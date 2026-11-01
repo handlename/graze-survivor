@@ -10,13 +10,9 @@ import {
   stepHazards,
 } from './hazards';
 import { clampPlayerPosition } from './input';
+import { GAME_PARAMS, type GameParams } from './params';
 import {
-  COMBO_HOLD_MS,
-  GAME_OVER_EXPLOSION_MS,
-  GRAZE_TICK_MS,
   HUD_HEIGHT,
-  INITIAL_LIVES,
-  INVULNERABLE_MS,
   LOGICAL_HEIGHT,
   LOGICAL_WIDTH,
   type GamePhase,
@@ -42,18 +38,21 @@ export interface StepEvents {
 }
 
 const DEFAULT_CENTER_X = LOGICAL_WIDTH / 2;
-const DEFAULT_CENTER_Y = HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * 0.6;
 const MAX_STEP_DT_MS = 50;
-const PEAK_WINDOW_MS = 500;
 
-export function createInitialGameState(): GameState {
+function getDefaultCenterY(params: GameParams = GAME_PARAMS): number {
+  return HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * params.player.defaultCenterYRatio;
+}
+
+export function createInitialGameState(params: GameParams = GAME_PARAMS): GameState {
+  const centerY = getDefaultCenterY(params);
   return {
     phase: 'TITLE',
     player: {
       x: DEFAULT_CENTER_X,
-      y: DEFAULT_CENTER_Y,
+      y: centerY,
       invulnerableMs: 0,
-      trail: [{ x: DEFAULT_CENTER_X, y: DEFAULT_CENTER_Y }],
+      trail: [{ x: DEFAULT_CENTER_X, y: centerY }],
     },
     hazards: [],
     sparks: [],
@@ -63,11 +62,11 @@ export function createInitialGameState(): GameState {
     maxCombo: 1.0,
     comboGauge: 0,
     totalGrazeCount: 0,
-    lives: INITIAL_LIVES,
+    lives: params.player.initialLives,
     survivalTimeMs: 0,
-    nextBulletInMs: 120,
-    nextLaserInMs: 550,
-    nextBombInMs: 1250,
+    nextBulletInMs: params.threat.initialBulletDelayMs,
+    nextLaserInMs: params.threat.initialLaserDelayMs,
+    nextBombInMs: params.threat.initialBombDelayMs,
     spawnCounter: 0,
     screenShakeMs: 0,
     hitFlashMs: 0,
@@ -77,10 +76,10 @@ export function createInitialGameState(): GameState {
   };
 }
 
-export function startNewGame(prev: GameState): GameState {
+export function startNewGame(prev: GameState, params: GameParams = GAME_PARAMS): GameState {
   const startPos = clampPlayerPosition(prev.player.x, prev.player.y);
   return {
-    ...createInitialGameState(),
+    ...createInitialGameState(params),
     phase: 'PLAYING',
     player: {
       x: startPos.x,
@@ -101,8 +100,8 @@ export function togglePauseGame(state: GameState): GameState {
   return state;
 }
 
-export function resetPlayerCenter(state: GameState): GameState {
-  const center = { x: DEFAULT_CENTER_X, y: DEFAULT_CENTER_Y };
+export function resetPlayerCenter(state: GameState, params: GameParams = GAME_PARAMS): GameState {
+  const center = { x: DEFAULT_CENTER_X, y: getDefaultCenterY(params) };
   return {
     ...state,
     player: {
@@ -117,7 +116,8 @@ export function resetPlayerCenter(state: GameState): GameState {
 function stepVisualEffects(
   sparks: readonly SparkParticle[],
   popups: readonly ScorePopup[],
-  dtMs: number
+  dtMs: number,
+  params: GameParams = GAME_PARAMS
 ): {
   readonly sparks: SparkParticle[];
   readonly popups: ScorePopup[];
@@ -142,7 +142,7 @@ function stepVisualEffects(
     if (remainingMs > 0) {
       nextPopups.push({
         ...p,
-        y: p.y - 24 * dtSec,
+        y: p.y - params.effects.popupRiseSpeedPxPerSec * dtSec,
         remainingMs,
       });
     }
@@ -155,8 +155,10 @@ export function stepGame(
   state: GameState,
   rawDtMs: number,
   moveDelta: { readonly dx: number; readonly dy: number },
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  params: GameParams = GAME_PARAMS
 ): { readonly state: GameState; readonly events: StepEvents } {
+  const { player: playerCfg, scoring, effects } = params;
   const emptyEvents: StepEvents = {
     grazeCount: 0,
     criticalGrazeCount: 0,
@@ -178,22 +180,27 @@ export function stepGame(
 
   // Lingering player explosion phase before transitioning to RESULT
   if (state.phase === 'GAME_OVER') {
-    const fx = stepVisualEffects(state.sparks, state.popups, dtMs);
+    const fx = stepVisualEffects(state.sparks, state.popups, dtMs, params);
     const remainingTimer = state.gameOverTimerMs - dtMs;
 
     // Spawn secondary explosion bursts while timer is active
-    if (remainingTimer > 400 && Math.floor((remainingTimer + dtMs) / 180) !== Math.floor(remainingTimer / 180)) {
-      for (let i = 0; i < 12; i++) {
+    if (
+      remainingTimer > effects.secondaryBurstCutoffMs &&
+      Math.floor((remainingTimer + dtMs) / effects.secondaryBurstIntervalMs) !==
+        Math.floor(remainingTimer / effects.secondaryBurstIntervalMs)
+    ) {
+      for (let i = 0; i < effects.secondaryBurstSparkCount; i++) {
         const angle = rng() * Math.PI * 2;
-        const speed = 40 + rng() * 160;
+        const speed =
+          effects.secondaryBurstMinSpeed + rng() * effects.secondaryBurstSpeedRange;
         fx.sparks.push({
-          x: state.player.x + (rng() - 0.5) * 16,
-          y: state.player.y + (rng() - 0.5) * 16,
+          x: state.player.x + (rng() - 0.5) * effects.secondaryBurstSpreadPx,
+          y: state.player.y + (rng() - 0.5) * effects.secondaryBurstSpreadPx,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           color: i % 2 === 0 ? '#E62E2E' : '#111111',
-          remainingMs: 650,
-          totalMs: 650,
+          remainingMs: effects.secondaryBurstSparkDurationMs,
+          totalMs: effects.secondaryBurstSparkDurationMs,
         });
       }
     }
@@ -203,7 +210,7 @@ export function stepGame(
       state: {
         ...state,
         phase: finished ? 'RESULT' : 'GAME_OVER',
-        hazards: stepHazards(state.hazards, dtMs * 0.35),
+        hazards: stepHazards(state.hazards, dtMs * effects.gameOverHazardSlowFactor, params),
         sparks: fx.sparks,
         popups: fx.popups,
         gameOverTimerMs: Math.max(0, remainingTimer),
@@ -222,10 +229,11 @@ export function stepGame(
     state.player.y + moveDelta.dy
   );
 
-  const nextTrail = [clampedPos, ...state.player.trail.slice(0, 11)];
+  const maxTrailPrev = Math.max(0, Math.floor(effects.playerTrailLength) - 1);
+  const nextTrail = [clampedPos, ...state.player.trail.slice(0, maxTrailPrev)];
 
   if (state.phase !== 'PLAYING') {
-    const fx = stepVisualEffects(state.sparks, state.popups, dtMs);
+    const fx = stepVisualEffects(state.sparks, state.popups, dtMs, params);
     return {
       state: {
         ...state,
@@ -251,8 +259,8 @@ export function stepGame(
   let laserActivatedCount = 0;
   for (const h of state.hazards) {
     if (h.kind === 'BOMB') {
-      const prevPhase = getBombPhase(h).phase;
-      const nextPhase = getBombPhase({ ...h, elapsedMs: h.elapsedMs + dtMs }).phase;
+      const prevPhase = getBombPhase(h, params).phase;
+      const nextPhase = getBombPhase({ ...h, elapsedMs: h.elapsedMs + dtMs }, params).phase;
       if (prevPhase !== 'ACTIVE' && nextPhase === 'ACTIVE') {
         bombDetonatedCount++;
       }
@@ -265,11 +273,11 @@ export function stepGame(
     }
   }
 
-  let hazards: Hazard[] = [...stepHazards(state.hazards, dtMs)];
-  const fx = stepVisualEffects(state.sparks, state.popups, dtMs);
+  let hazards: Hazard[] = [...stepHazards(state.hazards, dtMs, params)];
+  const fx = stepVisualEffects(state.sparks, state.popups, dtMs, params);
 
   // Independent continuous spawners with randomized jitter so lasers and bombs never lockstep
-  const threat = computeThreatLevel(survivalTimeMs);
+  const threat = computeThreatLevel(survivalTimeMs, params);
   let nextBulletInMs = state.nextBulletInMs - dtMs;
   let nextLaserInMs = state.nextLaserInMs - dtMs;
   let nextBombInMs = state.nextBombInMs - dtMs;
@@ -279,25 +287,25 @@ export function stepGame(
 
   if (nextBulletInMs <= 0) {
     spawnCounter += 1;
-    const bullets = spawnBulletStream(threat, clampedPos, `s${spawnCounter}`, rng);
+    const bullets = spawnBulletStream(threat, clampedPos, `s${spawnCounter}`, rng, params);
     hazards.push(...bullets);
-    nextBulletInMs = nextJitteredInterval(threat.bulletIntervalMs, rng);
+    nextBulletInMs = nextJitteredInterval(threat.bulletIntervalMs, rng, params);
   }
 
   if (nextLaserInMs <= 0) {
     spawnCounter += 1;
-    const lasers = spawnLaserFormation(threat, `s${spawnCounter}`, rng);
+    const lasers = spawnLaserFormation(threat, `s${spawnCounter}`, rng, params);
     hazards.push(...lasers);
     spawnedLaserCount = lasers.length;
-    nextLaserInMs = nextJitteredInterval(threat.laserIntervalMs, rng);
+    nextLaserInMs = nextJitteredInterval(threat.laserIntervalMs, rng, params);
   }
 
   if (nextBombInMs <= 0) {
     spawnCounter += 1;
-    const bombs = spawnBombCluster(threat, clampedPos, `s${spawnCounter}`, rng);
+    const bombs = spawnBombCluster(threat, clampedPos, `s${spawnCounter}`, rng, params);
     hazards.push(...bombs);
     spawnedBombCount = bombs.length;
-    nextBombInMs = nextJitteredInterval(threat.bombIntervalMs, rng);
+    nextBombInMs = nextJitteredInterval(threat.bombIntervalMs, rng, params);
   }
 
   let score = state.score;
@@ -322,7 +330,7 @@ export function stepGame(
   if (invulnerableMs === 0) {
     const contacts = hazards.map((hazard) => ({
       hazard,
-      contact: evaluateHazardContact(clampedPos.x, clampedPos.y, hazard),
+      contact: evaluateHazardContact(clampedPos.x, clampedPos.y, hazard, params),
     }));
 
     const hasDirectHit = contacts.some((c) => c.contact.kind === 'HIT');
@@ -332,29 +340,30 @@ export function stepGame(
       lives = Math.max(0, lives - 1);
       comboMultiplier = 1.0;
       comboGauge = 0;
-      nextInvulnerableMs = INVULNERABLE_MS;
-      screenShakeMs = 460;
-      hitFlashMs = 380;
+      nextInvulnerableMs = playerCfg.invulnerableMs;
+      screenShakeMs = effects.hitScreenShakeMs;
+      hitFlashMs = effects.hitFlashMs;
       hazards = hazards.map((h) => (h.grazeTimerMs !== 0 ? { ...h, grazeTimerMs: 0 } : h));
 
       if (lives === 0) {
         playerExploded = true;
         phase = 'GAME_OVER';
-        gameOverTimerMs = GAME_OVER_EXPLOSION_MS;
-        screenShakeMs = 900;
-        hitFlashMs = 700;
+        gameOverTimerMs = effects.gameOverExplosionMs;
+        screenShakeMs = effects.gameOverScreenShakeMs;
+        hitFlashMs = effects.gameOverHitFlashMs;
         // Massive explosion debris burst from player coordinates
-        for (let i = 0; i < 42; i++) {
-          const angle = (i / 42) * Math.PI * 2 + (rng() - 0.5) * 0.2;
-          const speed = 35 + rng() * 220;
+        for (let i = 0; i < effects.deathBurstSparkCount; i++) {
+          const angle =
+            (i / effects.deathBurstSparkCount) * Math.PI * 2 + (rng() - 0.5) * 0.2;
+          const speed = effects.deathBurstMinSpeed + rng() * effects.deathBurstSpeedRange;
           fx.sparks.push({
             x: clampedPos.x,
             y: clampedPos.y,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
             color: i % 2 === 0 ? '#E62E2E' : '#111111',
-            remainingMs: 1100,
-            totalMs: 1100,
+            remainingMs: effects.deathBurstSparkDurationMs,
+            totalMs: effects.deathBurstSparkDurationMs,
           });
         }
       } else if (lives === 1) {
@@ -368,12 +377,15 @@ export function stepGame(
         if (contact.kind === 'GRAZE') {
           activeGrazeSources += 1;
           let timer = hazard.grazeTimerMs + dtMs;
-          while (timer >= GRAZE_TICK_MS) {
-            timer -= GRAZE_TICK_MS;
-            const reward = computeGrazeTickReward(contact.closeness, comboMultiplier);
+          while (timer >= scoring.grazeTickMs) {
+            timer -= scoring.grazeTickMs;
+            const reward = computeGrazeTickReward(contact.closeness, comboMultiplier, params);
             score += reward.scoreDelta;
             frameScoreGain += reward.scoreDelta;
-            comboMultiplier = Math.min(999.9, +(comboMultiplier + reward.comboDelta).toFixed(2));
+            comboMultiplier = Math.min(
+              scoring.maxComboMultiplier,
+              +(comboMultiplier + reward.comboDelta).toFixed(2)
+            );
             maxCombo = Math.max(maxCombo, comboMultiplier);
             comboGauge = 1.0;
             totalGrazeCount += 1;
@@ -382,29 +394,32 @@ export function stepGame(
               criticalGrazeCount += 1;
             }
 
-            const sparkBursts = reward.isCritical ? 4 : 2;
+            const sparkBursts = reward.isCritical
+              ? effects.grazeSparksCritical
+              : effects.grazeSparksNormal;
             for (let s = 0; s < sparkBursts; s++) {
               const angle = rng() * Math.PI * 2;
-              const speed = 70 + rng() * 140;
+              const speed =
+                effects.grazeSparkMinSpeed + rng() * effects.grazeSparkSpeedRange;
               fx.sparks.push({
                 x: clampedPos.x,
                 y: clampedPos.y,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed,
                 color: reward.isCritical ? '#E62E2E' : '#111111',
-                remainingMs: 260,
-                totalMs: 260,
+                remainingMs: effects.grazeSparkDurationMs,
+                totalMs: effects.grazeSparkDurationMs,
               });
             }
 
-            if (fx.popups.length < 24) {
+            if (fx.popups.length < effects.maxPopups) {
               fx.popups.push({
                 x: clampedPos.x + (rng() - 0.5) * 32,
                 y: clampedPos.y - 16 - rng() * 12,
                 text: `+${reward.scoreDelta}`,
                 color: reward.isCritical ? '#E62E2E' : '#111111',
                 isCritical: reward.isCritical,
-                remainingMs: 520,
+                remainingMs: effects.popupDurationMs,
               });
             }
           }
@@ -418,13 +433,13 @@ export function stepGame(
       hazards = updatedHazards;
 
       if (grazeCount > 0 && (criticalGrazeCount > 0 || activeGrazeSources >= 2)) {
-        screenShakeMs = Math.max(screenShakeMs, 90);
+        screenShakeMs = Math.max(screenShakeMs, effects.grazeScreenShakeMs);
       }
     }
   }
 
-  // Rolling 500ms score-rate window & Peak Moment Snapshot capture
-  const cutoffMs = survivalTimeMs - PEAK_WINDOW_MS;
+  // Rolling score-rate window & Peak Moment Snapshot capture
+  const cutoffMs = survivalTimeMs - scoring.peakWindowMs;
   const recentScoreSamples: ScoreSample[] = state.recentScoreSamples.filter(
     (s) => s.timeMs > cutoffMs
   );
@@ -432,9 +447,9 @@ export function stepGame(
     recentScoreSamples.push({ timeMs: survivalTimeMs, scoreDelta: frameScoreGain });
   }
   const windowTotalScore = recentScoreSamples.reduce((sum, s) => sum + s.scoreDelta, 0);
-  const windowScoreRatePerSec = Math.round(windowTotalScore * (1000 / PEAK_WINDOW_MS));
+  const windowScoreRatePerSec = Math.round(windowTotalScore * (1000 / scoring.peakWindowMs));
 
-  const nextSparks = fx.sparks.slice(-110);
+  const nextSparks = fx.sparks.slice(-effects.maxSparks);
   const nextPlayer = {
     x: clampedPos.x,
     y: clampedPos.y,
@@ -460,10 +475,13 @@ export function stepGame(
 
   if (!directHit && grazeCount === 0) {
     if (comboGauge > 0) {
-      comboGauge = Math.max(0, comboGauge - dtMs / COMBO_HOLD_MS);
+      comboGauge = Math.max(0, comboGauge - dtMs / scoring.comboHoldMs);
     } else if (comboMultiplier > 1.0) {
       const excess = comboMultiplier - 1.0;
-      const decayPerSec = Math.max(2.0, excess * 0.25);
+      const decayPerSec = Math.max(
+        scoring.comboDecayMinPerSec,
+        excess * scoring.comboDecayExcessFactor
+      );
       comboMultiplier = Math.max(1.0, +(comboMultiplier - decayPerSec * (dtMs / 1000)).toFixed(2));
     }
   }

@@ -1,10 +1,5 @@
-import {
-  BASE_TICK_SCORE,
-  CORE_RADIUS,
-  GRAZE_RADIUS,
-  type ContactResult,
-  type Hazard,
-} from './types';
+import { GAME_PARAMS, type GameParams } from './params';
+import { type ContactResult, type Hazard } from './types';
 
 export function distanceToPoint(px: number, py: number, x: number, y: number): number {
   return Math.hypot(px - x, py - y);
@@ -30,12 +25,16 @@ export function distanceToSegment(
   return Math.hypot(px - projX, py - projY);
 }
 
-function classifyEdgeDistance(distanceToEdge: number): ContactResult {
-  if (distanceToEdge <= CORE_RADIUS) {
+function classifyEdgeDistance(
+  distanceToEdge: number,
+  params: GameParams = GAME_PARAMS
+): ContactResult {
+  const { coreRadius, grazeRadius } = params.player;
+  if (distanceToEdge <= coreRadius) {
     return { kind: 'HIT' };
   }
-  if (distanceToEdge <= GRAZE_RADIUS) {
-    const rawCloseness = 1 - (distanceToEdge - CORE_RADIUS) / (GRAZE_RADIUS - CORE_RADIUS);
+  if (distanceToEdge <= grazeRadius) {
+    const rawCloseness = 1 - (distanceToEdge - coreRadius) / (grazeRadius - coreRadius);
     const closeness = Math.max(0, Math.min(1, rawCloseness));
     return {
       kind: 'GRAZE',
@@ -46,11 +45,16 @@ function classifyEdgeDistance(distanceToEdge: number): ContactResult {
   return { kind: 'NONE' };
 }
 
-export function evaluateHazardContact(px: number, py: number, hazard: Hazard): ContactResult {
+export function evaluateHazardContact(
+  px: number,
+  py: number,
+  hazard: Hazard,
+  params: GameParams = GAME_PARAMS
+): ContactResult {
   switch (hazard.kind) {
     case 'BULLET': {
       const dist = distanceToPoint(px, py, hazard.x, hazard.y) - hazard.radius;
-      return classifyEdgeDistance(dist);
+      return classifyEdgeDistance(dist, params);
     }
     case 'BOMB': {
       const activeStart = hazard.convergeDurationMs + hazard.holdDurationMs;
@@ -59,7 +63,7 @@ export function evaluateHazardContact(px: number, py: number, hazard: Hazard): C
         return { kind: 'NONE' };
       }
       const dist = distanceToPoint(px, py, hazard.x, hazard.y) - hazard.blastRadius;
-      return classifyEdgeDistance(dist);
+      return classifyEdgeDistance(dist, params);
     }
     case 'LASER': {
       if (
@@ -70,24 +74,32 @@ export function evaluateHazardContact(px: number, py: number, hazard: Hazard): C
       }
       const dist =
         distanceToSegment(px, py, hazard.x1, hazard.y1, hazard.x2, hazard.y2) - hazard.halfWidth;
-      return classifyEdgeDistance(dist);
+      return classifyEdgeDistance(dist, params);
     }
   }
 }
 
 export function computeGrazeTickReward(
   closeness: number,
-  comboMultiplier: number
+  comboMultiplier: number,
+  params: GameParams = GAME_PARAMS
 ): {
   readonly scoreDelta: number;
   readonly comboDelta: number;
   readonly isCritical: boolean;
 } {
+  const {
+    baseTickScore,
+    proximityScoreMultiplier,
+    comboBaseDelta,
+    comboProximityDelta,
+    criticalClosenessThreshold,
+  } = params.scoring;
   const clamped = Math.max(0, Math.min(1, closeness));
-  const proximityFactor = 1 + 3 * clamped * clamped;
-  const scoreDelta = Math.round(BASE_TICK_SCORE * proximityFactor * comboMultiplier);
-  const comboDelta = 0.1 + 0.25 * clamped * clamped;
-  const isCritical = clamped >= 0.7;
+  const proximityFactor = 1 + proximityScoreMultiplier * clamped * clamped;
+  const scoreDelta = Math.round(baseTickScore * proximityFactor * comboMultiplier);
+  const comboDelta = comboBaseDelta + comboProximityDelta * clamped * clamped;
+  const isCritical = clamped >= criticalClosenessThreshold;
   return {
     scoreDelta,
     comboDelta,

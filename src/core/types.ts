@@ -1,17 +1,19 @@
+import { GAME_PARAMS } from './params';
+
 export const LOGICAL_WIDTH = 360;
 export const LOGICAL_HEIGHT = 640;
 export const HUD_HEIGHT = 56;
 export const PLAYFIELD_TOP = HUD_HEIGHT;
 export const PLAYFIELD_HEIGHT = LOGICAL_HEIGHT - HUD_HEIGHT;
 
-export const CORE_RADIUS = 3.0;
-export const GRAZE_RADIUS = 24.0;
-export const GRAZE_TICK_MS = 50;
-export const BASE_TICK_SCORE = 100;
-export const COMBO_HOLD_MS = 1800;
-export const INVULNERABLE_MS = 1500;
-export const INITIAL_LIVES = 3;
-export const GAME_OVER_EXPLOSION_MS = 1600;
+export const CORE_RADIUS = GAME_PARAMS.player.coreRadius;
+export const GRAZE_RADIUS = GAME_PARAMS.player.grazeRadius;
+export const GRAZE_TICK_MS = GAME_PARAMS.scoring.grazeTickMs;
+export const BASE_TICK_SCORE = GAME_PARAMS.scoring.baseTickScore;
+export const COMBO_HOLD_MS = GAME_PARAMS.scoring.comboHoldMs;
+export const INVULNERABLE_MS = GAME_PARAMS.player.invulnerableMs;
+export const INITIAL_LIVES = GAME_PARAMS.player.initialLives;
+export const GAME_OVER_EXPLOSION_MS = GAME_PARAMS.effects.gameOverExplosionMs;
 
 export interface Vector2D {
   readonly x: number;

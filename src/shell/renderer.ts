@@ -1,4 +1,5 @@
 import { getBombPhase, getLaserPhase } from '../core/hazards';
+import { GAME_PARAMS } from '../core/params';
 import {
   CORE_RADIUS,
   GAME_OVER_EXPLOSION_MS,
@@ -159,21 +160,24 @@ export function renderLaserHazard(
   laser: LaserHazard
 ): void {
   if (laser.elapsedMs < 0) return;
+  const { effects } = GAME_PARAMS;
   const phase = getLaserPhase(laser);
   if (phase === 'WARNING') {
-    const drawProgress = Math.min(1, laser.elapsedMs / 140);
+    const drawProgress = Math.min(1, laser.elapsedMs / effects.laserWarningDrawDurationMs);
     const ex = laser.x1 + (laser.x2 - laser.x1) * drawProgress;
     const ey = laser.y1 + (laser.y2 - laser.y1) * drawProgress;
     const imminence = Math.max(0, Math.min(1, laser.elapsedMs / laser.warningDurationMs));
+    const snapThreshold = effects.laserWarningSnapThreshold;
 
     // 1. Lock-on beam width corridor that snaps inward right before ignition
     let corridorWidth = laser.halfWidth * 2;
-    if (imminence > 0.82) {
-      const snapT = (imminence - 0.82) / 0.18;
+    if (imminence > snapThreshold) {
+      const snapT = (imminence - snapThreshold) / Math.max(1e-6, 1 - snapThreshold);
       corridorWidth = laser.halfWidth * 2 * (1 - snapT * 0.85);
     }
     ctx.save();
-    ctx.strokeStyle = imminence > 0.82 ? 'rgba(230, 46, 46, 0.28)' : PALETTE.dangerSoft;
+    ctx.strokeStyle =
+      imminence > snapThreshold ? 'rgba(230, 46, 46, 0.28)' : PALETTE.dangerSoft;
     ctx.lineWidth = corridorWidth;
     ctx.beginPath();
     ctx.moveTo(laser.x1, laser.y1);
@@ -195,15 +199,18 @@ export function renderLaserHazard(
     ctx.restore();
   } else if (phase === 'ACTIVE') {
     const activeElapsed = laser.elapsedMs - laser.warningDurationMs;
-    const collapseWindowMs = Math.min(120, laser.activeDurationMs * 0.25);
+    const collapseWindowMs = Math.min(
+      effects.laserCollapseWindowMaxMs,
+      laser.activeDurationMs * 0.25
+    );
 
-    // Ignition spike (first 75ms) and tapered decay collapse (last ~120ms)
+    // Ignition spike and tapered decay collapse
     let widthScale = 1.0;
     let isIgnitionFlash = false;
-    if (activeElapsed < 75) {
-      const flashT = 1 - activeElapsed / 75;
-      widthScale = 1.0 + flashT * 0.55;
-      isIgnitionFlash = activeElapsed < 40;
+    if (activeElapsed < effects.laserIgnitionSpikeDurationMs) {
+      const flashT = 1 - activeElapsed / effects.laserIgnitionSpikeDurationMs;
+      widthScale = 1.0 + flashT * effects.laserIgnitionWidthBoost;
+      isIgnitionFlash = activeElapsed < effects.laserIgnitionFlashDurationMs;
     } else if (activeElapsed > laser.activeDurationMs - collapseWindowMs) {
       const collapseT =
         (activeElapsed - (laser.activeDurationMs - collapseWindowMs)) / collapseWindowMs;
@@ -311,7 +318,12 @@ export class CanvasRenderer {
     ctx.clip();
 
     if (state.screenShakeMs > 0) {
-      const intensity = Math.min(7, (state.screenShakeMs / 350) * 6);
+      const { screenShakeMaxPx, screenShakeBasePx, screenShakeRefDurationMs } =
+        GAME_PARAMS.effects;
+      const intensity = Math.min(
+        screenShakeMaxPx,
+        (state.screenShakeMs / screenShakeRefDurationMs) * screenShakeBasePx
+      );
       const ox = (Math.random() - 0.5) * intensity * 2;
       const oy = (Math.random() - 0.5) * intensity * 2;
       ctx.translate(ox, oy);
@@ -323,7 +335,8 @@ export class CanvasRenderer {
     // Calibration guide crosshair on Title/Result
     if (isIdlePhase) {
       const cx = LOGICAL_WIDTH / 2;
-      const cy = HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * 0.6;
+      const cy =
+        HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * GAME_PARAMS.player.defaultCenterYRatio;
       ctx.save();
       ctx.strokeStyle = PALETTE.fgMuted;
       ctx.lineWidth = 1;
@@ -339,7 +352,11 @@ export class CanvasRenderer {
 
     // Direct Hit Impact Flash
     if (state.hitFlashMs > 0) {
-      const flashAlpha = Math.min(0.28, state.hitFlashMs / 380);
+      const flashRefMs = Math.max(1, GAME_PARAMS.effects.hitFlashMs);
+      const flashAlpha = Math.min(
+        GAME_PARAMS.effects.hitFlashMaxAlpha,
+        state.hitFlashMs / flashRefMs
+      );
       ctx.fillStyle = `rgba(230, 46, 46, ${flashAlpha})`;
       ctx.fillRect(0, HUD_HEIGHT, LOGICAL_WIDTH, LOGICAL_HEIGHT - HUD_HEIGHT);
     }
@@ -450,7 +467,8 @@ export class CanvasRenderer {
       ctx.arc(bomb.x, bomb.y, info.currentRingRadius, 0, Math.PI * 2);
       ctx.stroke();
     } else if (info.phase === 'HOLD') {
-      const blink = Math.floor(bomb.elapsedMs / 50) % 2 === 0;
+      const blink =
+        Math.floor(bomb.elapsedMs / GAME_PARAMS.effects.bombHoldBlinkIntervalMs) % 2 === 0;
       ctx.fillStyle = blink ? 'rgba(230, 46, 46, 0.24)' : PALETTE.dangerSoft;
       ctx.beginPath();
       ctx.arc(bomb.x, bomb.y, bomb.blastRadius, 0, Math.PI * 2);
@@ -552,7 +570,10 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    if (invulnerableMs > 0 && Math.floor(invulnerableMs / 55) % 2 === 1) {
+    if (
+      invulnerableMs > 0 &&
+      Math.floor(invulnerableMs / GAME_PARAMS.effects.invulnerableBlinkIntervalMs) % 2 === 1
+    ) {
       return;
     }
 
