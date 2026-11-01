@@ -130,39 +130,50 @@ export interface ThreatProfile {
 
 export function computeThreatLevel(
   elapsedSurvivalMs: number,
-  params: GameParams = GAME_PARAMS
+  params: GameParams = GAME_PARAMS,
+  startLevel = params.threat.defaultStartLevel
 ): ThreatProfile {
   const { threat, bullet } = params;
   const safeMs = Math.max(0, elapsedSurvivalMs);
-  const level = Math.floor(safeMs / threat.levelIntervalMs);
-  const progress = Math.min(1, safeMs / threat.maxProgressDurationMs);
+  const effectiveElapsedMs = safeMs + startLevel * threat.levelIntervalMs;
+  const level = Math.floor(effectiveElapsedMs / threat.levelIntervalMs);
+  const progress = Math.min(1, effectiveElapsedMs / threat.maxProgressDurationMs);
 
   return {
     level,
     bulletSpeed: bullet.speed,
-    bulletsPerStream:
+    bulletsPerStream: Math.max(
+      1,
       threat.baseBulletsPerStream +
-      Math.min(
-        threat.maxExtraBulletsPerStream,
-        Math.floor(level * threat.bulletsPerStreamLevelFactor)
-      ),
+        Math.min(
+          threat.maxExtraBulletsPerStream,
+          Math.floor(level * threat.bulletsPerStreamLevelFactor)
+        )
+    ),
     streamCount: level >= threat.dualStreamStartLevel ? 2 : 1,
     bulletIntervalMs: Math.round(
       threat.bulletIntervalStartMs -
         (threat.bulletIntervalStartMs - threat.bulletIntervalEndMs) * progress
     ),
-    laserCount: Math.min(
-      threat.maxLaserCount,
-      threat.baseLaserCount + Math.floor(level / threat.laserCountLevelDivisor)
+    laserCount: Math.max(
+      0,
+      Math.min(
+        threat.maxLaserCount,
+        threat.baseLaserCount +
+          Math.floor((level + threat.laserCountLevelOffset) / threat.laserCountLevelDivisor)
+      )
     ),
     laserIntervalMs: Math.round(
       threat.laserIntervalStartMs -
         (threat.laserIntervalStartMs - threat.laserIntervalEndMs) * progress
     ),
-    bombCount: Math.min(
-      threat.maxBombCount,
-      threat.baseBombCount +
-        Math.floor((level + threat.bombCountLevelOffset) / threat.bombCountLevelDivisor)
+    bombCount: Math.max(
+      0,
+      Math.min(
+        threat.maxBombCount,
+        threat.baseBombCount +
+          Math.floor((level + threat.bombCountLevelOffset) / threat.bombCountLevelDivisor)
+      )
     ),
     bombIntervalMs: Math.round(
       threat.bombIntervalStartMs -
@@ -670,6 +681,9 @@ export function spawnLaserFormation(
   rng: () => number,
   params: GameParams = GAME_PARAMS
 ): readonly LaserHazard[] {
+  if (threat.laserCount <= 0) {
+    return [];
+  }
   const { laser } = params;
   const canCage = threat.laserCount >= laser.cageMinLasers;
   const patternCount = canCage ? 3 : 2;

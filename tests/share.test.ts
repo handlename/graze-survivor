@@ -8,6 +8,7 @@ import {
   type RankingRecord,
 } from '../src/core/types';
 import {
+  buildShareMessage,
   computeClampedPeakCamera,
   renderResultCardCanvas,
 } from '../src/shell/share';
@@ -225,5 +226,22 @@ describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.35x player-cent
         o.args[3] === 380
     );
     expect(outerFrameIndex).toBeGreaterThan(scoreTextIndex);
+  });
+
+  it('displays startLevel on the result card canvas and in buildShareMessage', () => {
+    const { ops } = setupMockCanvasDocument();
+    const state = { ...createInitialGameState(), startLevel: -3 };
+    const recordWithLevel: RankingRecord = {
+      ...sampleRecord,
+      startLevel: -3,
+    };
+
+    renderResultCardCanvas(state, recordWithLevel, false);
+
+    const fillTexts = ops.filter((o) => o.op === 'fillText').map((o) => String(o.args[0]));
+    expect(fillTexts).toContain('START LEVEL: -3');
+
+    const msg = buildShareMessage(recordWithLevel, false);
+    expect(msg).toContain('START LEVEL: LV.-3');
   });
 });

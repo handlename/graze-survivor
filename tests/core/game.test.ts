@@ -5,6 +5,12 @@ import {
   stepGame,
   togglePauseGame,
 } from '../../src/core/game';
+import {
+  clampStartLevel,
+  formatStartLevel,
+  GAME_TIPS,
+  selectPreGameTip,
+} from '../../src/core/tips';
 import type { Hazard } from '../../src/core/types';
 
 describe('core game engine loop', () => {
@@ -230,5 +236,44 @@ describe('core game engine loop', () => {
     const { state: afterSpike } = stepGame(initial, 3000, { dx: 0, dy: 0 });
     expect(afterSpike.survivalTimeMs).toBe(50);
     expect(afterSpike.comboGauge).toBeGreaterThan(0.95);
+  });
+
+  it('selects fixed first-play tip on initial run and random tip from 20 Japanese tips afterwards', () => {
+    expect(GAME_TIPS).toHaveLength(20);
+    expect(new Set(GAME_TIPS).size).toBe(20);
+
+    const firstPlayTip = selectPreGameTip(false, () => 0.95);
+    expect(firstPlayTip).toBe(GAME_TIPS[0]);
+    expect(firstPlayTip).toContain('かすらせる（グレイズする）');
+
+    const subsequentTip = selectPreGameTip(true, () => 0.5);
+    expect(subsequentTip).toBe(GAME_TIPS[10]);
+  });
+
+  it('clamps startLevel to [-5, 10], formats signed levels, and applies startLevel to stepGame spawning', () => {
+    expect(clampStartLevel(-99)).toBe(-5);
+    expect(clampStartLevel(99)).toBe(10);
+    expect(clampStartLevel(Number.NaN)).toBe(0);
+    expect(formatStartLevel(-5)).toBe('-5');
+    expect(formatStartLevel(0)).toBe('0');
+    expect(formatStartLevel(4)).toBe('+4');
+
+    const started = startNewGame(createInitialGameState(), undefined, -5);
+    expect(started.startLevel).toBe(-5);
+
+    const readyToSpawn = {
+      ...started,
+      nextBulletInMs: 5,
+      nextLaserInMs: 5,
+      nextBombInMs: 5,
+    };
+
+    const { state: afterStep, events } = stepGame(readyToSpawn, 20, { dx: 0, dy: 0 });
+    expect(afterStep.startLevel).toBe(-5);
+    expect(events.spawnedLaserCount).toBe(0);
+    expect(events.spawnedBombCount).toBe(0);
+    expect(afterStep.hazards.some((h) => h.kind === 'LASER')).toBe(false);
+    expect(afterStep.hazards.some((h) => h.kind === 'BOMB')).toBe(false);
+    expect(afterStep.hazards.filter((h) => h.kind === 'BULLET').length).toBeGreaterThanOrEqual(1);
   });
 });

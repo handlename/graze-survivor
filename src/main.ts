@@ -6,6 +6,8 @@ import {
   togglePauseGame,
 } from './core/game';
 import { computeGyroDelta, computeSwipeDelta, type MotionSample } from './core/input';
+import { GAME_PARAMS } from './core/params';
+import { clampStartLevel, formatStartLevel, selectPreGameTip } from './core/tips';
 import type { ControlOptions, GameState, RankingRecord } from './core/types';
 import { SoundController } from './shell/audio';
 import { requestSensorPermissions, type PermissionTarget } from './shell/permissions';
@@ -19,8 +21,10 @@ import {
   formatSurvivalTime,
   formatTimestamp,
   handleUrlResetParam,
+  hasSeenFirstTip,
   loadControlOptions,
   loadRanking,
+  markFirstTipSeen,
   saveControlOptions,
   saveRankingRecord,
 } from './shell/storage';
@@ -29,12 +33,17 @@ handleUrlResetParam();
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const titleOverlay = document.getElementById('title-overlay') as HTMLElement;
+const briefingOverlay = document.getElementById('briefing-overlay') as HTMLElement;
 const rankingOverlay = document.getElementById('ranking-overlay') as HTMLElement;
 const pauseOverlay = document.getElementById('pause-overlay') as HTMLElement;
 const resultOverlay = document.getElementById('result-overlay') as HTMLElement;
 const optionsModal = document.getElementById('options-modal') as HTMLElement;
 
 const titleBest = document.getElementById('title-best') as HTMLElement;
+const briefingTipText = document.getElementById('briefing-tip-text') as HTMLElement;
+const sliderStartLevel = document.getElementById('slider-start-level') as HTMLInputElement;
+const valStartLevel = document.getElementById('val-start-level') as HTMLElement;
+const btnBriefingStart = document.getElementById('btn-briefing-start') as HTMLButtonElement;
 const resultBanner = document.getElementById('result-banner') as HTMLElement;
 const resultCardPreview = document.getElementById('result-card-preview') as HTMLImageElement;
 const rankingList = document.getElementById('ranking-list') as HTMLOListElement;
@@ -149,6 +158,12 @@ function syncOptionsUI(): void {
   btnSound.textContent = `SOUND: ${options.soundEnabled ? 'ON' : 'OFF'}`;
   btnSound.classList.toggle('active', options.soundEnabled);
   sound.setEnabled(options.soundEnabled);
+
+  const startLevel = clampStartLevel(options.startLevel ?? GAME_PARAMS.threat.defaultStartLevel);
+  sliderStartLevel.min = String(GAME_PARAMS.threat.minStartLevel);
+  sliderStartLevel.max = String(GAME_PARAMS.threat.maxStartLevel);
+  sliderStartLevel.value = String(startLevel);
+  valStartLevel.textContent = formatStartLevel(startLevel);
 }
 
 function updateTitleBest(): void {
@@ -192,7 +207,7 @@ function renderRankingListInto(
     bottomRow.className = 'ranking-row-bottom';
 
     const timeSpan = document.createElement('span');
-    timeSpan.textContent = `TIME ${formatSurvivalTime(rec.survivalTimeMs)} (×${rec.maxCombo.toFixed(1)})`;
+    timeSpan.textContent = `TIME ${formatSurvivalTime(rec.survivalTimeMs)} (×${rec.maxCombo.toFixed(1)}) / LV.${formatStartLevel(rec.startLevel ?? 0)}`;
 
     const dateSpan = document.createElement('span');
     dateSpan.textContent = rec.timestamp.slice(0, 16);
@@ -289,6 +304,7 @@ function showTitleScreen(): void {
   pauseOverlay.classList.remove('active');
   resultOverlay.classList.remove('active');
   rankingOverlay.classList.remove('active');
+  briefingOverlay.classList.remove('active');
   titleOverlay.classList.add('active');
   updateTitleBest();
   window.setTimeout(() => renderer.resize(), 0);
@@ -299,13 +315,46 @@ function showRankingScreen(): void {
   const rankings = loadRanking();
   renderRankingListInto(titleRankingList, rankings, -1);
   titleOverlay.classList.remove('active');
+  briefingOverlay.classList.remove('active');
   rankingOverlay.classList.add('active');
+}
+
+function showBriefingScreen(): void {
+  closeOptionsModal();
+  btnPause.classList.add('hidden');
+  pauseOverlay.classList.remove('active');
+  resultOverlay.classList.remove('active');
+  rankingOverlay.classList.remove('active');
+  titleOverlay.classList.remove('active');
+
+  const tip = selectPreGameTip(hasSeenFirstTip());
+  briefingTipText.textContent = tip;
+
+  const startLevel = clampStartLevel(options.startLevel ?? GAME_PARAMS.threat.defaultStartLevel);
+  sliderStartLevel.min = String(GAME_PARAMS.threat.minStartLevel);
+  sliderStartLevel.max = String(GAME_PARAMS.threat.maxStartLevel);
+  sliderStartLevel.value = String(startLevel);
+  valStartLevel.textContent = formatStartLevel(startLevel);
+
+  briefingOverlay.classList.add('active');
+  window.setTimeout(() => renderer.resize(), 0);
 }
 
 btnOpenRanking.addEventListener('click', showRankingScreen);
 btnRankingBack.addEventListener('click', showTitleScreen);
 btnQuit.addEventListener('click', showTitleScreen);
 btnResultTitle.addEventListener('click', showTitleScreen);
+
+sliderStartLevel.addEventListener('input', () => {
+  const level = clampStartLevel(parseInt(sliderStartLevel.value, 10));
+  valStartLevel.textContent = formatStartLevel(level);
+  updateOptions({ startLevel: level });
+});
+
+btnBriefingStart.addEventListener('click', () => {
+  markFirstTipSeen();
+  void handleStartGame();
+});
 
 function syncPauseUI(): void {
   const isPaused = state.phase === 'PAUSED';
@@ -360,11 +409,13 @@ async function handleStartGame(): Promise<void> {
     await enableGyroWithFeedback();
   }
   closeOptionsModal();
-  state = startNewGame(state);
+  const startLevel = clampStartLevel(options.startLevel ?? GAME_PARAMS.threat.defaultStartLevel);
+  state = startNewGame(state, GAME_PARAMS, startLevel);
   btnPause.classList.remove('hidden');
   btnPause.textContent = 'PAUSE';
   btnShare.textContent = 'SHARE RESULT';
   titleOverlay.classList.remove('active');
+  briefingOverlay.classList.remove('active');
   rankingOverlay.classList.remove('active');
   pauseOverlay.classList.remove('active');
   resultOverlay.classList.remove('active');
@@ -373,11 +424,11 @@ async function handleStartGame(): Promise<void> {
 }
 
 btnStart.addEventListener('click', () => {
-  void handleStartGame();
+  showBriefingScreen();
 });
 
 btnRetry.addEventListener('click', () => {
-  void handleStartGame();
+  showBriefingScreen();
 });
 
 btnShare.addEventListener('click', async () => {
@@ -521,6 +572,7 @@ function onFrame(now: number): void {
       maxCombo: state.maxCombo,
       totalGrazeCount: state.totalGrazeCount,
       timestamp: formatTimestamp(new Date()),
+      startLevel: state.startLevel,
     };
     const saved = saveRankingRecord(record);
     resultBanner.textContent = saved.isNewRecord ? 'NEW RECORD' : 'RESULT';

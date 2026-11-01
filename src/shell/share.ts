@@ -1,4 +1,5 @@
 import { getBombPhase } from '../core/hazards';
+import { formatStartLevel } from '../core/tips';
 import {
   HUD_HEIGHT,
   LOGICAL_HEIGHT,
@@ -307,14 +308,16 @@ export function renderResultCardCanvas(
   ctx.font = `700 22px ${MONO_FONT}`;
   ctx.fillText(`×${record.maxCombo.toFixed(1)}`, 200, 210);
 
-  // Graze Ticks & Timestamp
+  // Start Level, Graze Ticks & Timestamp
+  const startLvLabel = formatStartLevel(record.startLevel ?? state.startLevel ?? 0);
   ctx.fillStyle = PALETTE.fg;
   ctx.font = `600 12px ${MONO_FONT}`;
-  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 252);
+  ctx.fillText(`START LEVEL: ${startLvLabel}`, 28, 246);
+  ctx.fillText(`GRAZE TICKS: ${record.totalGrazeCount}`, 28, 268);
 
   ctx.fillStyle = PALETTE.fgMuted;
   ctx.font = `500 12px ${MONO_FONT}`;
-  ctx.fillText(`DATE: ${record.timestamp}`, 28, 278);
+  ctx.fillText(`DATE: ${record.timestamp}`, 28, 290);
 
   // Game Title Footer
   ctx.fillStyle = PALETTE.fg;
@@ -339,10 +342,12 @@ export function buildShareMessage(record: RankingRecord, isNewRecord: boolean): 
   const headline = isNewRecord
     ? 'MAXIMUM GRAZE! NEW HIGH SCORE!'
     : 'GRAZE SURVIVOR RESULT';
+  const startLvLabel = formatStartLevel(record.startLevel ?? 0);
   return [
     headline,
     `SCORE: ${record.score.toLocaleString('en-US')} (MAX COMBO ×${record.maxCombo.toFixed(1)})`,
     `SURVIVAL TIME: ${formatSurvivalTime(record.survivalTimeMs)}`,
+    `START LEVEL: LV.${startLvLabel}`,
     'GRAZE SURVIVOR #GRAZESURVIVOR',
     PUBLIC_GAME_URL,
   ].join('\n');

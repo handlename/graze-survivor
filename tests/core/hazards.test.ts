@@ -215,4 +215,41 @@ describe('hazards lifecycle and continuous spawners', () => {
       expect(acuteIntersectionAngleDeg(cageLasers[i], next)).toBeGreaterThanOrEqual(29.9);
     }
   });
+
+  it('scales threat across negative and positive startLevels (-5 to +10) and matches time progression', () => {
+    const lvMinus5 = computeThreatLevel(0, undefined, -5);
+    expect(lvMinus5.level).toBe(-5);
+    expect(lvMinus5.bulletsPerStream).toBe(1);
+    expect(lvMinus5.bombCount).toBe(0);
+    expect(lvMinus5.laserCount).toBe(0);
+    expect(lvMinus5.bulletIntervalMs).toBeGreaterThan(
+      computeThreatLevel(0, undefined, 0).bulletIntervalMs
+    );
+    expect(spawnLaserFormation(lvMinus5, 'none', () => 0.5)).toEqual([]);
+    expect(spawnBombCluster(lvMinus5, { x: 180, y: 340 }, 'none', () => 0.5)).toEqual([]);
+
+    const lvMinus4 = computeThreatLevel(0, undefined, -4);
+    expect(lvMinus4.bombCount).toBe(0);
+    expect(lvMinus4.laserCount).toBe(0);
+
+    const lvMinus3 = computeThreatLevel(0, undefined, -3);
+    expect(lvMinus3.bombCount).toBe(1);
+    expect(lvMinus3.laserCount).toBe(0);
+
+    const lvMinus2 = computeThreatLevel(0, undefined, -2);
+    expect(lvMinus2.bombCount).toBe(1);
+    expect(lvMinus2.laserCount).toBe(0);
+
+    const lvMinus1 = computeThreatLevel(0, undefined, -1);
+    expect(lvMinus1.bombCount).toBe(2);
+    expect(lvMinus1.laserCount).toBe(1);
+
+    const lvMinus5After75s = computeThreatLevel(75_000, undefined, -5);
+    const lv0AtStart = computeThreatLevel(0, undefined, 0);
+    expect(lvMinus5After75s).toEqual(lv0AtStart);
+
+    const lvPlus10AtStart = computeThreatLevel(0, undefined, 10);
+    const lv0After150s = computeThreatLevel(150_000, undefined, 0);
+    expect(lvPlus10AtStart).toEqual(lv0After150s);
+  });
 });

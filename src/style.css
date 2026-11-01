@@ -131,6 +131,63 @@ body {
   text-align: center;
 }
 
+/* Briefing Overlay (Tips & Start Level) */
+.briefing-tip-box {
+  width: 100%;
+  border: 1px solid var(--fg);
+  background: var(--bg);
+  padding: 12px;
+}
+
+.briefing-tip-text {
+  font-family: var(--sans-font);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--fg);
+  font-weight: 500;
+  margin: 0;
+}
+
+.briefing-level-box {
+  width: 100%;
+  border: 1px solid var(--fg);
+  background: var(--bg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--mono-font);
+}
+
+.briefing-level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.briefing-level-val {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.briefing-level-box input[type="range"] {
+  width: 100%;
+  accent-color: var(--fg);
+}
+
+.briefing-level-scale {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+}
+
 .best-line {
   font-family: var(--mono-font);
   font-size: 0.8rem;

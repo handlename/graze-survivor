@@ -107,6 +107,7 @@ export interface ControlOptions {
   readonly invertX: boolean;
   readonly invertY: boolean;
   readonly soundEnabled: boolean;
+  readonly startLevel?: number;
 }
 
 export interface RankingRecord {
@@ -115,6 +116,7 @@ export interface RankingRecord {
   readonly maxCombo: number;
   readonly totalGrazeCount: number;
   readonly timestamp: string;
+  readonly startLevel?: number;
 }
 
 export type GamePhase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'GAME_OVER' | 'RESULT';
@@ -136,6 +138,7 @@ export interface PeakMomentSnapshot {
 
 export interface GameState {
   readonly phase: GamePhase;
+  readonly startLevel: number;
   readonly player: PlayerState;
   readonly hazards: readonly Hazard[];
   readonly sparks: readonly SparkParticle[];

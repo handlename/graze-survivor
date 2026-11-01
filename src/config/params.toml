@@ -41,6 +41,10 @@ comboDecayExcessFactor = 0.25
 peakWindowMs = 500
 
 [threat]
+# 開始脅威レベル (startLevel) の選択可能範囲と初期デフォルト値
+minStartLevel = -5
+maxStartLevel = 10
+defaultStartLevel = 0
 # ゲーム開始直後の初回スポーンまでの待機時間 (ms)
 initialBulletDelayMs = 120
 initialLaserDelayMs = 550
@@ -58,9 +62,10 @@ dualStreamStartLevel = 3
 # 弾ストリームの基本スポーン間隔 (ms): 開始時 -> 最大進行時
 bulletIntervalStartMs = 920
 bulletIntervalEndMs = 420
-# レーザー同時発射本数の初期値・上限・レベル除数 (baseLaserCount + floor(level / laserCountLevelDivisor))
+# レーザー同時発射本数の初期値・上限・レベルオフセット・レベル除数
 baseLaserCount = 2
 maxLaserCount = 5
+laserCountLevelOffset = -1
 laserCountLevelDivisor = 2
 # レーザーの基本スポーン間隔 (ms): 開始時 -> 最大進行時
 laserIntervalStartMs = 2100

@@ -23,6 +23,9 @@ export interface ScoringParams {
 }
 
 export interface ThreatParams {
+  readonly minStartLevel: number;
+  readonly maxStartLevel: number;
+  readonly defaultStartLevel: number;
   readonly initialBulletDelayMs: number;
   readonly initialLaserDelayMs: number;
   readonly initialBombDelayMs: number;
@@ -36,6 +39,7 @@ export interface ThreatParams {
   readonly bulletIntervalEndMs: number;
   readonly baseLaserCount: number;
   readonly maxLaserCount: number;
+  readonly laserCountLevelOffset: number;
   readonly laserCountLevelDivisor: number;
   readonly laserIntervalStartMs: number;
   readonly laserIntervalEndMs: number;
@@ -215,7 +219,7 @@ export interface GameParams {
 }
 
 type SectionSchema<T> = {
-  readonly [K in keyof T]: 'positive' | 'nonNegative' | 'unitInterval';
+  readonly [K in keyof T]: 'positive' | 'nonNegative' | 'unitInterval' | 'integer';
 };
 
 const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> } = {
@@ -240,6 +244,9 @@ const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> }
     peakWindowMs: 'positive',
   },
   threat: {
+    minStartLevel: 'integer',
+    maxStartLevel: 'integer',
+    defaultStartLevel: 'integer',
     initialBulletDelayMs: 'nonNegative',
     initialLaserDelayMs: 'nonNegative',
     initialBombDelayMs: 'nonNegative',
@@ -253,6 +260,7 @@ const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> }
     bulletIntervalEndMs: 'positive',
     baseLaserCount: 'positive',
     maxLaserCount: 'positive',
+    laserCountLevelOffset: 'integer',
     laserCountLevelDivisor: 'positive',
     laserIntervalStartMs: 'positive',
     laserIntervalEndMs: 'positive',
@@ -488,6 +496,9 @@ export function parseGameParams(rawToml: string): GameParams {
       if (rule === 'unitInterval' && (val < 0 || val > 1)) {
         throw new Error(`Parameter "${sectionName}.${key}" must be between 0 and 1 (got ${val})`);
       }
+      if (rule === 'integer' && !Number.isInteger(val)) {
+        throw new Error(`Parameter "${sectionName}.${key}" must be an integer (got ${val})`);
+      }
       validatedSection[key] = val;
     }
     result[sectionName] = Object.freeze(validatedSection);
@@ -497,6 +508,14 @@ export function parseGameParams(rawToml: string): GameParams {
   if (typed.player.grazeRadius <= typed.player.coreRadius) {
     throw new Error(
       `Invalid player radii: player.grazeRadius (${typed.player.grazeRadius}) must be greater than player.coreRadius (${typed.player.coreRadius})`
+    );
+  }
+  if (
+    typed.threat.minStartLevel > typed.threat.defaultStartLevel ||
+    typed.threat.defaultStartLevel > typed.threat.maxStartLevel
+  ) {
+    throw new Error(
+      `Invalid threat startLevel bounds: minStartLevel (${typed.threat.minStartLevel}) <= defaultStartLevel (${typed.threat.defaultStartLevel}) <= maxStartLevel (${typed.threat.maxStartLevel})`
     );
   }
 

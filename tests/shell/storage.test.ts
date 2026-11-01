@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   handleUrlResetParam,
+  hasSeenFirstTip,
   loadControlOptions,
   loadRanking,
+  markFirstTipSeen,
   saveRankingRecord,
 } from '../../src/shell/storage';
 
@@ -67,5 +69,46 @@ describe('local ranking and options persistence', () => {
     expect(didReset).toBe(true);
     expect(loadRanking(store)).toEqual([]);
     expect(replaceState).toHaveBeenCalledWith(null, '', '/graze-survivor/?foo=bar');
+  });
+
+  it('persists first-tip seen state, clamps startLevel in control options, and preserves startLevel on rankings', () => {
+    const store = createMemoryStorage({
+      'graze-survivor:options': JSON.stringify({ mode: 'SWIPE', startLevel: -99 }),
+      'graze-survivor:rankings': JSON.stringify([
+        {
+          score: 80000,
+          survivalTimeMs: 40000,
+          maxCombo: 10.0,
+          totalGrazeCount: 100,
+          timestamp: '2026-11-01 20:00:00',
+        },
+        {
+          score: 90000,
+          survivalTimeMs: 50000,
+          maxCombo: 14.0,
+          totalGrazeCount: 120,
+          timestamp: '2026-11-01 20:10:00',
+          startLevel: -3,
+        },
+      ]),
+    });
+
+    expect(hasSeenFirstTip(store)).toBe(false);
+    markFirstTipSeen(store);
+    expect(hasSeenFirstTip(store)).toBe(true);
+
+    expect(loadControlOptions(store).startLevel).toBe(-5);
+
+    const rankings = loadRanking(store);
+    expect(rankings[0].startLevel).toBe(-3);
+    expect(rankings[1].startLevel).toBe(0);
+
+    const replaceState = vi.fn();
+    handleUrlResetParam(
+      { search: '?reset=1', pathname: '/graze-survivor/', hash: '' },
+      { replaceState },
+      store
+    );
+    expect(hasSeenFirstTip(store)).toBe(false);
   });
 });

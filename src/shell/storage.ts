@@ -1,7 +1,9 @@
+import { clampStartLevel } from '../core/tips';
 import type { ControlOptions, RankingRecord } from '../core/types';
 
 export const RANKING_STORAGE_KEY = 'graze-survivor:rankings';
 export const OPTIONS_STORAGE_KEY = 'graze-survivor:options';
+export const TIPS_SEEN_STORAGE_KEY = 'graze-survivor:tips-seen';
 const MAX_RANKINGS = 10;
 
 export const DEFAULT_CONTROL_OPTIONS: ControlOptions = {
@@ -12,6 +14,7 @@ export const DEFAULT_CONTROL_OPTIONS: ControlOptions = {
   invertX: false,
   invertY: false,
   soundEnabled: true,
+  startLevel: 0,
 };
 
 function getDefaultStorage(): Storage | undefined {
@@ -42,6 +45,11 @@ export function loadRanking(
           typeof item.totalGrazeCount === 'number' &&
           typeof item.timestamp === 'string'
       )
+      .map((item) => ({
+        ...item,
+        startLevel:
+          typeof item.startLevel === 'number' ? clampStartLevel(item.startLevel) : 0,
+      }))
       .sort((a, b) => b.score - a.score || b.survivalTimeMs - a.survivalTimeMs)
       .slice(0, MAX_RANKINGS);
   } catch {
@@ -57,14 +65,19 @@ export function saveRankingRecord(
   readonly isNewRecord: boolean;
   readonly rankIndex: number;
 } {
+  const normalizedRecord: RankingRecord = {
+    ...record,
+    startLevel:
+      typeof record.startLevel === 'number' ? clampStartLevel(record.startLevel) : 0,
+  };
   const previous = loadRanking(storage);
   const prevBest = previous.length > 0 ? previous[0].score : -1;
-  const combined = [...previous, record].sort(
+  const combined = [...previous, normalizedRecord].sort(
     (a, b) => b.score - a.score || b.survivalTimeMs - a.survivalTimeMs
   );
   const rankings = combined.slice(0, MAX_RANKINGS);
-  const rankIndex = rankings.indexOf(record);
-  const isNewRecord = record.score > prevBest && record.score > 0;
+  const rankIndex = rankings.indexOf(normalizedRecord);
+  const isNewRecord = normalizedRecord.score > prevBest && normalizedRecord.score > 0;
 
   if (storage) {
     try {
@@ -111,6 +124,10 @@ export function loadControlOptions(
         typeof parsed.soundEnabled === 'boolean'
           ? parsed.soundEnabled
           : DEFAULT_CONTROL_OPTIONS.soundEnabled,
+      startLevel:
+        typeof parsed.startLevel === 'number'
+          ? clampStartLevel(parsed.startLevel)
+          : DEFAULT_CONTROL_OPTIONS.startLevel,
     };
   } catch {
     return DEFAULT_CONTROL_OPTIONS;
@@ -129,6 +146,28 @@ export function saveControlOptions(
   }
 }
 
+export function hasSeenFirstTip(
+  storage: Pick<Storage, 'getItem'> | undefined = getDefaultStorage()
+): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(TIPS_SEEN_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markFirstTipSeen(
+  storage: Pick<Storage, 'setItem'> | undefined = getDefaultStorage()
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(TIPS_SEEN_STORAGE_KEY, '1');
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
 export function handleUrlResetParam(
   loc: { search: string; pathname: string; hash: string } = window.location,
   hist: { replaceState: (data: unknown, unused: string, url?: string | URL | null) => void } = window.history,
@@ -139,6 +178,7 @@ export function handleUrlResetParam(
     return false;
   }
   storage?.removeItem(RANKING_STORAGE_KEY);
+  storage?.removeItem(TIPS_SEEN_STORAGE_KEY);
   params.delete('reset');
   const query = params.toString();
   const cleanUrl = `${loc.pathname}${query ? `?${query}` : ''}${loc.hash}`;

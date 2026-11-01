@@ -11,6 +11,7 @@ import {
 } from './hazards';
 import { clampPlayerPosition } from './input';
 import { GAME_PARAMS, type GameParams } from './params';
+import { clampStartLevel } from './tips';
 import {
   HUD_HEIGHT,
   LOGICAL_HEIGHT,
@@ -44,10 +45,14 @@ function getDefaultCenterY(params: GameParams = GAME_PARAMS): number {
   return HUD_HEIGHT + (LOGICAL_HEIGHT - HUD_HEIGHT) * params.player.defaultCenterYRatio;
 }
 
-export function createInitialGameState(params: GameParams = GAME_PARAMS): GameState {
+export function createInitialGameState(
+  params: GameParams = GAME_PARAMS,
+  startLevel = params.threat.defaultStartLevel
+): GameState {
   const centerY = getDefaultCenterY(params);
   return {
     phase: 'TITLE',
+    startLevel: clampStartLevel(startLevel, params),
     player: {
       x: DEFAULT_CENTER_X,
       y: centerY,
@@ -76,10 +81,14 @@ export function createInitialGameState(params: GameParams = GAME_PARAMS): GameSt
   };
 }
 
-export function startNewGame(prev: GameState, params: GameParams = GAME_PARAMS): GameState {
+export function startNewGame(
+  prev: GameState,
+  params: GameParams = GAME_PARAMS,
+  startLevel = prev.startLevel
+): GameState {
   const startPos = clampPlayerPosition(prev.player.x, prev.player.y);
   return {
-    ...createInitialGameState(params),
+    ...createInitialGameState(params, startLevel),
     phase: 'PLAYING',
     player: {
       x: startPos.x,
@@ -277,7 +286,7 @@ export function stepGame(
   const fx = stepVisualEffects(state.sparks, state.popups, dtMs, params);
 
   // Independent continuous spawners with randomized jitter so lasers and bombs never lockstep
-  const threat = computeThreatLevel(survivalTimeMs, params);
+  const threat = computeThreatLevel(survivalTimeMs, params, state.startLevel);
   let nextBulletInMs = state.nextBulletInMs - dtMs;
   let nextLaserInMs = state.nextLaserInMs - dtMs;
   let nextBombInMs = state.nextBombInMs - dtMs;
@@ -489,6 +498,7 @@ export function stepGame(
   return {
     state: {
       phase,
+      startLevel: state.startLevel,
       player: nextPlayer,
       hazards,
       sparks: nextSparks,

@@ -36,6 +36,38 @@
           </div>
         </section>
 
+        <!-- Pre-Game Briefing (Tips & Start Level) Overlay -->
+        <section id="briefing-overlay" class="overlay">
+          <div class="overlay-card">
+            <div class="section-heading">TIPS</div>
+            <div class="briefing-tip-box">
+              <p id="briefing-tip-text" class="briefing-tip-text"></p>
+            </div>
+            <div class="briefing-level-box">
+              <div class="briefing-level-header">
+                <span>START LEVEL</span>
+                <span id="val-start-level" class="briefing-level-val">0</span>
+              </div>
+              <input
+                id="slider-start-level"
+                type="range"
+                min="-5"
+                max="10"
+                step="1"
+                value="0"
+              />
+              <div class="briefing-level-scale">
+                <span>EASY</span>
+                <span>0</span>
+                <span>HARD</span>
+              </div>
+            </div>
+            <button id="btn-briefing-start" type="button" class="primary-btn full-width-btn">
+              START
+            </button>
+          </div>
+        </section>
+
         <!-- Ranking Screen Overlay (Title -> Ranking) -->
         <section id="ranking-overlay" class="overlay">
           <div class="overlay-card">
