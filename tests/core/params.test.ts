@@ -44,7 +44,7 @@ describe('game parameters TOML loader and validator', () => {
       .replace(/^baseTickScore\s*=.*$/m, 'baseTickScore = 250')
       .replace(/^speed\s*=.*$/m, 'speed = 140')
       .replace(/^radius\s*=.*$/m, 'radius = 6.5')
-      .replace(/^warningDurationMs\s*=.*$/m, 'warningDurationMs = 1200')
+      .replace(/^warningDurationMs\s*=.*$/gm, 'warningDurationMs = 1200')
       .replace(/^convergeDurationMs\s*=.*$/m, 'convergeDurationMs = 600');
     const customParams = parseGameParams(customToml);
 

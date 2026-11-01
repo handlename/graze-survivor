@@ -1,5 +1,5 @@
 import { getBombPhase, getLaserPhase } from '../core/hazards';
-import { GAME_PARAMS } from '../core/params';
+import { GAME_PARAMS, type GameParams } from '../core/params';
 import {
   CORE_RADIUS,
   GAME_OVER_EXPLOSION_MS,
@@ -257,6 +257,80 @@ export function renderLaserHazard(
   }
 }
 
+export function computeBulletTelegraphProjection(
+  bullet: BulletHazard,
+  params: GameParams = GAME_PARAMS
+): {
+  readonly gx: number;
+  readonly gy: number;
+  readonly progress: number;
+  readonly isSnap: boolean;
+} {
+  const totalWait = Math.max(1, bullet.warningDurationMs);
+  const progress = 1 - Math.min(1, Math.max(0, -bullet.elapsedMs / totalWait));
+  const extraStaggerSec = Math.max(0, (totalWait - params.bullet.warningDurationMs) / 1000);
+  const previewSec =
+    (params.effects.bulletTelegraphBasePreviewSec +
+      extraStaggerSec * params.effects.bulletTelegraphStaggerPreviewScale) *
+    (0.45 + 0.55 * progress);
+  return {
+    gx: bullet.x + bullet.vx * previewSec,
+    gy: bullet.y + bullet.vy * previewSec,
+    progress,
+    isSnap: progress > params.effects.bulletTelegraphSnapThreshold,
+  };
+}
+
+export function renderBulletHazard(
+  ctx: CanvasRenderingContext2D,
+  bullet: BulletHazard,
+  params: GameParams = GAME_PARAMS
+): void {
+  if (bullet.elapsedMs < 0) {
+    const { gx, gy, progress, isSnap } = computeBulletTelegraphProjection(bullet, params);
+    const angle = Math.atan2(bullet.vy, bullet.vx);
+    const tickLen = 3.5 + progress * 3.5;
+
+    ctx.strokeStyle = PALETTE.dangerSoft;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(bullet.x, bullet.y);
+    ctx.lineTo(gx, gy);
+    ctx.stroke();
+
+    ctx.strokeStyle = isSnap ? PALETTE.danger : 'rgba(230, 46, 46, 0.50)';
+    ctx.lineWidth = isSnap ? 1.5 : 1.1;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy);
+    ctx.lineTo(gx + Math.cos(angle) * tickLen, gy + Math.sin(angle) * tickLen);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(gx, gy, 2.2, 0, Math.PI * 2);
+    if (isSnap) {
+      ctx.fillStyle = PALETTE.danger;
+      ctx.fill();
+    } else {
+      ctx.fillStyle = PALETTE.bg;
+      ctx.fill();
+      ctx.strokeStyle = PALETTE.danger;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+    }
+    return;
+  }
+
+  ctx.fillStyle = PALETTE.danger;
+  ctx.beginPath();
+  ctx.arc(bullet.x, bullet.y, bullet.radius + 1.0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = PALETTE.bg;
+  ctx.beginPath();
+  ctx.arc(bullet.x, bullet.y, bullet.radius * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -503,15 +577,7 @@ export class CanvasRenderer {
   }
 
   private renderBullet(ctx: CanvasRenderingContext2D, bullet: BulletHazard): void {
-    ctx.fillStyle = PALETTE.danger;
-    ctx.beginPath();
-    ctx.arc(bullet.x, bullet.y, bullet.radius + 1.0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = PALETTE.bg;
-    ctx.beginPath();
-    ctx.arc(bullet.x, bullet.y, bullet.radius * 0.35, 0, Math.PI * 2);
-    ctx.fill();
+    renderBulletHazard(ctx, bullet);
   }
 
   private renderPlayerExplosion(ctx: CanvasRenderingContext2D, state: GameState): void {

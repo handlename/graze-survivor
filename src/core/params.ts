@@ -55,21 +55,71 @@ export interface BulletParams {
   readonly radius: number;
   readonly offscreenCullMargin: number;
   readonly aimSpread: number;
+  readonly warningDurationMs: number;
   readonly edgeTopWeight: number;
   readonly edgeLeftThreshold: number;
   readonly edgeRightThreshold: number;
   readonly edgeHorizontalPadding: number;
   readonly edgeVerticalPadding: number;
   readonly edgeOutsideOffset: number;
+  readonly edgeInsetMargin: number;
+  readonly inFieldMarginX: number;
+  readonly inFieldMarginY: number;
+  readonly inFieldMinSafeDistance: number;
+  readonly sweepUnlockLevel: number;
+  readonly crossUnlockLevel: number;
+  readonly ringUnlockLevel: number;
+  readonly curtainUnlockLevel: number;
+  readonly vortexUnlockLevel: number;
+  readonly flowerUnlockLevel: number;
+  readonly latticeUnlockLevel: number;
+  readonly starUnlockLevel: number;
   readonly lineSpacing: number;
+  readonly lineStaggerMs: number;
   readonly fanWays: number;
+  readonly fanHighLevelWays: number;
+  readonly fanHighLevelThreshold: number;
   readonly fanMinRows: number;
   readonly fanAngleStepRad: number;
   readonly fanRowSpacing: number;
+  readonly fanRowStaggerMs: number;
   readonly spiralAngleStepRad: number;
   readonly spiralSpacing: number;
+  readonly spiralStaggerMs: number;
   readonly crossMinPerSide: number;
   readonly crossSpacing: number;
+  readonly crossStaggerMs: number;
+  readonly ringBaseCount: number;
+  readonly ringMaxExtraCount: number;
+  readonly ringInnerSpeedDrop: number;
+  readonly ringLayerStaggerMs: number;
+  readonly ringDualLayerLevel: number;
+  readonly curtainBaseWays: number;
+  readonly curtainMaxExtraWays: number;
+  readonly curtainAngleStepRad: number;
+  readonly curtainRowTwistRad: number;
+  readonly curtainRowStaggerMs: number;
+  readonly vortexBaseArms: number;
+  readonly vortexHighArms: number;
+  readonly vortexHighArmLevel: number;
+  readonly vortexTwistRad: number;
+  readonly vortexStaggerMs: number;
+  readonly flowerPetals: number;
+  readonly flowerHighPetals: number;
+  readonly flowerHighPetalLevel: number;
+  readonly flowerBasePointsPerPetal: number;
+  readonly flowerMaxExtraPointsPerPetal: number;
+  readonly flowerSpeedMod: number;
+  readonly latticeBaseLanes: number;
+  readonly latticeMaxExtraLanes: number;
+  readonly latticeAngleRad: number;
+  readonly latticeLaneSpacing: number;
+  readonly latticeStaggerMs: number;
+  readonly starVertices: number;
+  readonly starChordStep: number;
+  readonly starSpeedScale: number;
+  readonly starBasePerEdge: number;
+  readonly starMaxExtraPerEdge: number;
 }
 
 export interface LaserParams {
@@ -149,6 +199,9 @@ export interface EffectsParams {
   readonly laserIgnitionFlashDurationMs: number;
   readonly laserIgnitionWidthBoost: number;
   readonly laserCollapseWindowMaxMs: number;
+  readonly bulletTelegraphBasePreviewSec: number;
+  readonly bulletTelegraphStaggerPreviewScale: number;
+  readonly bulletTelegraphSnapThreshold: number;
 }
 
 export interface GameParams {
@@ -218,21 +271,71 @@ const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> }
     radius: 'positive',
     offscreenCullMargin: 'nonNegative',
     aimSpread: 'nonNegative',
+    warningDurationMs: 'positive',
     edgeTopWeight: 'unitInterval',
     edgeLeftThreshold: 'unitInterval',
     edgeRightThreshold: 'unitInterval',
     edgeHorizontalPadding: 'nonNegative',
     edgeVerticalPadding: 'nonNegative',
     edgeOutsideOffset: 'nonNegative',
+    edgeInsetMargin: 'nonNegative',
+    inFieldMarginX: 'nonNegative',
+    inFieldMarginY: 'nonNegative',
+    inFieldMinSafeDistance: 'nonNegative',
+    sweepUnlockLevel: 'nonNegative',
+    crossUnlockLevel: 'nonNegative',
+    ringUnlockLevel: 'nonNegative',
+    curtainUnlockLevel: 'nonNegative',
+    vortexUnlockLevel: 'nonNegative',
+    flowerUnlockLevel: 'nonNegative',
+    latticeUnlockLevel: 'nonNegative',
+    starUnlockLevel: 'nonNegative',
     lineSpacing: 'positive',
+    lineStaggerMs: 'nonNegative',
     fanWays: 'positive',
+    fanHighLevelWays: 'positive',
+    fanHighLevelThreshold: 'nonNegative',
     fanMinRows: 'positive',
     fanAngleStepRad: 'nonNegative',
     fanRowSpacing: 'positive',
+    fanRowStaggerMs: 'nonNegative',
     spiralAngleStepRad: 'nonNegative',
     spiralSpacing: 'positive',
+    spiralStaggerMs: 'nonNegative',
     crossMinPerSide: 'positive',
     crossSpacing: 'positive',
+    crossStaggerMs: 'nonNegative',
+    ringBaseCount: 'positive',
+    ringMaxExtraCount: 'nonNegative',
+    ringInnerSpeedDrop: 'unitInterval',
+    ringLayerStaggerMs: 'nonNegative',
+    ringDualLayerLevel: 'nonNegative',
+    curtainBaseWays: 'positive',
+    curtainMaxExtraWays: 'nonNegative',
+    curtainAngleStepRad: 'nonNegative',
+    curtainRowTwistRad: 'nonNegative',
+    curtainRowStaggerMs: 'nonNegative',
+    vortexBaseArms: 'positive',
+    vortexHighArms: 'positive',
+    vortexHighArmLevel: 'nonNegative',
+    vortexTwistRad: 'nonNegative',
+    vortexStaggerMs: 'nonNegative',
+    flowerPetals: 'positive',
+    flowerHighPetals: 'positive',
+    flowerHighPetalLevel: 'nonNegative',
+    flowerBasePointsPerPetal: 'positive',
+    flowerMaxExtraPointsPerPetal: 'nonNegative',
+    flowerSpeedMod: 'unitInterval',
+    latticeBaseLanes: 'positive',
+    latticeMaxExtraLanes: 'nonNegative',
+    latticeAngleRad: 'nonNegative',
+    latticeLaneSpacing: 'positive',
+    latticeStaggerMs: 'nonNegative',
+    starVertices: 'positive',
+    starChordStep: 'positive',
+    starSpeedScale: 'positive',
+    starBasePerEdge: 'positive',
+    starMaxExtraPerEdge: 'nonNegative',
   },
   laser: {
     warningDurationMs: 'positive',
@@ -309,6 +412,9 @@ const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> }
     laserIgnitionFlashDurationMs: 'positive',
     laserIgnitionWidthBoost: 'nonNegative',
     laserCollapseWindowMaxMs: 'positive',
+    bulletTelegraphBasePreviewSec: 'positive',
+    bulletTelegraphStaggerPreviewScale: 'nonNegative',
+    bulletTelegraphSnapThreshold: 'unitInterval',
   },
 };
 

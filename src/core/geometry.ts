@@ -53,6 +53,9 @@ export function evaluateHazardContact(
 ): ContactResult {
   switch (hazard.kind) {
     case 'BULLET': {
+      if (hazard.elapsedMs < 0) {
+        return { kind: 'NONE' };
+      }
       const dist = distanceToPoint(px, py, hazard.x, hazard.y) - hazard.radius;
       return classifyEdgeDistance(dist, params);
     }

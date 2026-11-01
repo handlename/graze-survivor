@@ -88,6 +88,8 @@ radius = 4.0
 offscreenCullMargin = 180
 # 自機狙い時のターゲット座標のランダムブレ幅 (px)
 aimSpread = 90
+# 通常弾の発射前予兆マーカー表示時間 (ms)
+warningDurationMs = 550
 # 画面端スポーン辺の選択確率閾値 (0.0〜edgeTopWeight: 上, 〜edgeLeftThreshold: 左, 〜edgeRightThreshold: 右, 以降: 下)
 edgeTopWeight = 0.4
 edgeLeftThreshold = 0.68
@@ -98,19 +100,77 @@ edgeHorizontalPadding = 16
 edgeVerticalPadding = 30
 # 画面境界から外側へ離してスポーンさせるオフセット距離 (px)
 edgeOutsideOffset = 8
-# パターン0 (LINE: 直線連射) の弾間隔 (px)
+# 壁際発射パターンのプレイフィールド内周インセット距離 (px)
+edgeInsetMargin = 18
+# フィールド内発射パターンの画面端マージン (px) と自機からの最小安全距離 (px)
+inFieldMarginX = 48
+inFieldMarginY = 56
+inFieldMinSafeDistance = 110
+# 各通常弾パターンの解禁脅威レベル (level)
+sweepUnlockLevel = 1
+crossUnlockLevel = 1
+ringUnlockLevel = 2
+curtainUnlockLevel = 2
+vortexUnlockLevel = 3
+flowerUnlockLevel = 4
+latticeUnlockLevel = 5
+starUnlockLevel = 6
+# パターン0 (LINE: 直線連射) の弾間隔 (px) と発射時間差 (ms)
 lineSpacing = 13
-# パターン1 (FAN: 扇状連射) の方向数・最小列数・角度ステップ (rad)・列間隔 (px)
+lineStaggerMs = 90
+# パターン1 (FAN: 扇状連射) の方向数・高レベル方向数・高レベル閾値・最小列数・角度ステップ (rad)・列間隔 (px)・列発射時間差 (ms)
 fanWays = 3
+fanHighLevelWays = 5
+fanHighLevelThreshold = 5
 fanMinRows = 2
 fanAngleStepRad = 0.22
 fanRowSpacing = 18
-# パターン2 (SPIRAL: 螺旋スイープ) の1発ごとの角度変化量 (rad) と弾間隔 (px)
+fanRowStaggerMs = 130
+# パターン2 (SWEEP / SPIRAL: 螺旋スイープ) の1発ごとの角度変化量 (rad)・弾間隔 (px)・発射時間差 (ms)
 spiralAngleStepRad = 0.085
 spiralSpacing = 13
-# パターン3 (CROSS: 交差連射) の片側あたりの最小弾数と弾間隔 (px)
+spiralStaggerMs = 85
+# パターン3 (CROSS: 交差連射) の片側あたりの最小弾数・弾間隔 (px)・発射時間差 (ms)
 crossMinPerSide = 3
 crossSpacing = 14
+crossStaggerMs = 100
+# パターン4 (RING: 全方位円環) の基本弾数・追加弾数上限・内周リング速度低下率・内周時間差 (ms)・二重リング解禁レベル
+ringBaseCount = 10
+ringMaxExtraCount = 10
+ringInnerSpeedDrop = 0.16
+ringLayerStaggerMs = 120
+ringDualLayerLevel = 5
+# パターン5 (CURTAIN: 波・扇幕) の基本方向数・追加方向数上限・方向ステップ角 (rad)・行ごとの交互ひねり角 (rad)・行発射時間差 (ms)
+curtainBaseWays = 5
+curtainMaxExtraWays = 4
+curtainAngleStepRad = 0.16
+curtainRowTwistRad = 0.065
+curtainRowStaggerMs = 130
+# パターン6 (VORTEX: 二重渦巻き) の基本腕数・高レベル腕数・高レベル閾値・1段あたりの回転角 (rad)・段発射時間差 (ms)
+vortexBaseArms = 4
+vortexHighArms = 6
+vortexHighArmLevel = 6
+vortexTwistRad = 0.16
+vortexStaggerMs = 85
+# パターン7 (FLOWER: 花形ロゼット) の基本花弁数・高レベル花弁数・高レベル閾値・花弁1枚あたりの基本弾数・追加弾数上限・花弁速度変調振幅 (0.0〜1.0)
+flowerPetals = 5
+flowerHighPetals = 6
+flowerHighPetalLevel = 6
+flowerBasePointsPerPetal = 3
+flowerMaxExtraPointsPerPetal = 3
+flowerSpeedMod = 0.3
+# パターン8 (LATTICE: 斜交格子) の基本レーン数・追加レーン数上限・交差半角 (rad)・レーン間隔 (px)・段発射時間差 (ms)
+latticeBaseLanes = 3
+latticeMaxExtraLanes = 2
+latticeAngleRad = 0.42
+latticeLaneSpacing = 22
+latticeStaggerMs = 115
+# パターン9 (STAR: 星型・多角形) の頂点数・星型弦ステップ・基準速度倍率・1辺あたりの基本分割数・追加分割数上限
+starVertices = 5
+starChordStep = 2
+starSpeedScale = 1.15
+starBasePerEdge = 3
+starMaxExtraPerEdge = 3
 
 [laser]
 # レーザーのロックオン予兆時間 (ms)
@@ -215,3 +275,7 @@ laserIgnitionSpikeDurationMs = 75
 laserIgnitionFlashDurationMs = 40
 laserIgnitionWidthBoost = 0.55
 laserCollapseWindowMaxMs = 120
+# 通常弾予兆マーカーの基本プレビュー投影秒数 (秒)、時間差プレビュー係数、発射直前スナップ閾値 (0.0〜1.0)
+bulletTelegraphBasePreviewSec = 0.18
+bulletTelegraphStaggerPreviewScale = 0.35
+bulletTelegraphSnapThreshold = 0.78

@@ -13,6 +13,7 @@ import {
   drawCrossGrid,
   MONO_FONT,
   PALETTE,
+  renderBulletHazard,
   renderLaserHazard,
   renderPlayerShipAndRing,
 } from './renderer';
@@ -127,15 +128,7 @@ function renderPeakSnapshotCrop(
 
   for (const h of hazards) {
     if (h.kind === 'BULLET') {
-      const b = h as BulletHazard;
-      ctx.fillStyle = PALETTE.danger;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.radius + 1.0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = PALETTE.bg;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.radius * 0.35, 0, Math.PI * 2);
-      ctx.fill();
+      renderBulletHazard(ctx, h as BulletHazard);
     }
   }
 

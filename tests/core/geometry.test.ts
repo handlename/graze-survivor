@@ -21,6 +21,8 @@ describe('geometry & graze evaluation', () => {
       vx: 0,
       vy: 100,
       radius: 4,
+      elapsedMs: 0,
+      warningDurationMs: 550,
       grazeTimerMs: 0,
     };
     // Center distance = 6 <= CORE_RADIUS(3) + radius(4) = 7 -> HIT

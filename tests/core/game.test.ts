@@ -67,6 +67,8 @@ describe('core game engine loop', () => {
       vx: 0,
       vy: 50,
       radius: 4,
+      elapsedMs: 0,
+      warningDurationMs: 550,
       grazeTimerMs: 0,
     };
     const readyToSpawn = {
@@ -95,6 +97,8 @@ describe('core game engine loop', () => {
       vx: 0,
       vy: 0,
       radius: 4,
+      elapsedMs: 0,
+      warningDurationMs: 550,
       grazeTimerMs: 0,
     };
     const stateAt2Lives = {
@@ -125,6 +129,8 @@ describe('core game engine loop', () => {
         vx: 0,
         vy: 0,
         radius: 3,
+        elapsedMs: 0,
+        warningDurationMs: 550,
         grazeTimerMs: 0,
       },
       {
@@ -135,6 +141,8 @@ describe('core game engine loop', () => {
         vx: 0,
         vy: 0,
         radius: 4,
+        elapsedMs: 0,
+        warningDurationMs: 550,
         grazeTimerMs: 0,
       },
     ];

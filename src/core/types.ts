@@ -35,6 +35,8 @@ export interface BulletHazard {
   readonly vx: number;
   readonly vy: number;
   readonly radius: number;
+  readonly elapsedMs: number;
+  readonly warningDurationMs: number;
   readonly grazeTimerMs: number;
 }
 
