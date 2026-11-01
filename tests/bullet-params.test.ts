@@ -9,6 +9,7 @@ describe('Bullet & Telegraph Parameters', () => {
     expect(GAME_PARAMS.bullet.starUnlockLevel).toBe(6);
     expect(GAME_PARAMS.bullet.flowerSpeedMod).toBeGreaterThan(0);
     expect(GAME_PARAMS.bullet.flowerSpeedMod).toBeLessThan(1);
+    expect(GAME_PARAMS.bullet.maxGrazeTicks).toBe(10);
     expect(GAME_PARAMS.effects.bulletTelegraphBasePreviewSec).toBe(0.18);
     expect(GAME_PARAMS.effects.bulletTelegraphStaggerPreviewScale).toBe(0.35);
     expect(GAME_PARAMS.effects.bulletTelegraphSnapThreshold).toBe(0.78);

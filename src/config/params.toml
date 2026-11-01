@@ -89,6 +89,8 @@ minSpawnIntervalMs = 250
 speed = 92
 # 通常弾の当たり判定半径 (px)
 radius = 4.0
+# 通常弾1発あたりが獲得可能な最大グレイズティック数 (到達後はグレイズ判定が終了)
+maxGrazeTicks = 10
 # 画面外に出た弾を消去する外周マージン (px)
 offscreenCullMargin = 180
 # 自機狙い時のターゲット座標のランダムブレ幅 (px)

@@ -57,6 +57,7 @@ export interface ThreatParams {
 export interface BulletParams {
   readonly speed: number;
   readonly radius: number;
+  readonly maxGrazeTicks: number;
   readonly offscreenCullMargin: number;
   readonly aimSpread: number;
   readonly warningDurationMs: number;
@@ -277,6 +278,7 @@ const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> }
   bullet: {
     speed: 'positive',
     radius: 'positive',
+    maxGrazeTicks: 'positive',
     offscreenCullMargin: 'nonNegative',
     aimSpread: 'nonNegative',
     warningDurationMs: 'positive',
