@@ -394,7 +394,12 @@ export function stepGame(
             if (hazard.kind === 'BULLET') {
               currentGrazeCount += 1;
             }
-            const reward = computeGrazeTickReward(contact.closeness, comboMultiplier, params);
+            const reward = computeGrazeTickReward(
+              contact.closeness,
+              comboMultiplier,
+              params,
+              threat.level
+            );
             score += reward.scoreDelta;
             frameScoreGain += reward.scoreDelta;
             comboMultiplier = Math.min(

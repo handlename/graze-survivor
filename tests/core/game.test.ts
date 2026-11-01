@@ -242,17 +242,18 @@ describe('core game engine loop', () => {
     expect(afterSpike.comboGauge).toBeGreaterThan(0.95);
   });
 
-  it('selects fixed first-play tip on initial run and random tip from 21 Japanese tips afterwards', () => {
-    expect(GAME_TIPS).toHaveLength(21);
-    expect(new Set(GAME_TIPS).size).toBe(21);
+  it('selects fixed first-play tip on initial run and random tip from 22 Japanese tips afterwards', () => {
+    expect(GAME_TIPS).toHaveLength(22);
+    expect(new Set(GAME_TIPS).size).toBe(22);
     expect(GAME_TIPS.some((tip) => tip.includes('通常弾') && tip.includes('上限'))).toBe(true);
+    expect(GAME_TIPS.some((tip) => tip.includes('マイナス') && tip.includes('コンボ'))).toBe(true);
 
     const firstPlayTip = selectPreGameTip(false, () => 0.95);
     expect(firstPlayTip).toBe(GAME_TIPS[0]);
     expect(firstPlayTip).toContain('かすらせる（グレイズする）');
 
     const subsequentTip = selectPreGameTip(true, () => 0.5);
-    expect(subsequentTip).toBe(GAME_TIPS[10]);
+    expect(subsequentTip).toBe(GAME_TIPS[11]);
   });
 
   it('clamps startLevel to [-5, 10], formats signed levels, and applies startLevel to stepGame spawning', () => {
@@ -321,5 +322,46 @@ describe('core game engine loop', () => {
     expect(events2.grazeCount).toBe(0);
     expect(afterExhaustedStep.score).toBe(scoreAtCap);
     expect(afterExhaustedStep.comboMultiplier).toBe(comboAtCap);
+  });
+
+  it('suppresses combo multiplier growth when playing at negative threat levels', () => {
+    const bullet: BulletHazard = {
+      id: 'test-bullet-neg',
+      kind: 'BULLET',
+      x: 100,
+      y: 200,
+      vx: 0,
+      vy: 0,
+      radius: 4,
+      elapsedMs: 10,
+      warningDurationMs: 550,
+      grazeTimerMs: 0,
+      grazeCount: 0,
+    };
+
+    const initialLevel0 = {
+      ...startNewGame(createInitialGameState(), undefined, 0),
+      player: { x: 100, y: 208, invulnerableMs: 0, trail: [{ x: 100, y: 208 }] },
+      hazards: [bullet],
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
+    };
+    const { state: afterStep0 } = stepGame(initialLevel0, 50, { dx: 0, dy: 0 });
+    const comboGain0 = +(afterStep0.comboMultiplier - 1.0).toFixed(2);
+    expect(comboGain0).toBe(0.33);
+
+    const initialLevelNeg3 = {
+      ...startNewGame(createInitialGameState(), undefined, -3),
+      player: { x: 100, y: 208, invulnerableMs: 0, trail: [{ x: 100, y: 208 }] },
+      hazards: [bullet],
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
+    };
+    const { state: afterStepNeg3 } = stepGame(initialLevelNeg3, 50, { dx: 0, dy: 0 });
+    const comboGainNeg3 = +(afterStepNeg3.comboMultiplier - 1.0).toFixed(2);
+    expect(comboGainNeg3).toBe(0.08);
+    expect(afterStepNeg3.comboMultiplier).toBeLessThan(afterStep0.comboMultiplier);
   });
 });
