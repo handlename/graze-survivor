@@ -39,6 +39,8 @@ comboDecayMinPerSec = 2.0
 comboDecayExcessFactor = 0.25
 # リザルト画面「PEAK GRAZE MOMENT」算出用のスコアレート集計ウィンドウ幅 (ms)
 peakWindowMs = 500
+# 脅威レベルがマイナスの際のコンボ倍率上昇量抑制係数 (1 / (1 + |level| * negativeLevelComboFactor))
+negativeLevelComboFactor = 1.0
 
 [threat]
 # 開始脅威レベル (startLevel) の選択可能範囲と初期デフォルト値

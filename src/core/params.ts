@@ -20,6 +20,7 @@ export interface ScoringParams {
   readonly comboDecayMinPerSec: number;
   readonly comboDecayExcessFactor: number;
   readonly peakWindowMs: number;
+  readonly negativeLevelComboFactor: number;
 }
 
 export interface ThreatParams {
@@ -243,6 +244,7 @@ const SCHEMA: { readonly [S in keyof GameParams]: SectionSchema<GameParams[S]> }
     comboDecayMinPerSec: 'positive',
     comboDecayExcessFactor: 'nonNegative',
     peakWindowMs: 'positive',
+    negativeLevelComboFactor: 'nonNegative',
   },
   threat: {
     minStartLevel: 'integer',

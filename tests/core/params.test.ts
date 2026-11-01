@@ -30,6 +30,7 @@ describe('game parameters TOML loader and validator', () => {
     expect(GAME_PARAMS.scoring.grazeTickMs).toBe(GRAZE_TICK_MS);
     expect(GAME_PARAMS.scoring.baseTickScore).toBe(BASE_TICK_SCORE);
     expect(GAME_PARAMS.scoring.comboHoldMs).toBe(COMBO_HOLD_MS);
+    expect(GAME_PARAMS.scoring.negativeLevelComboFactor).toBe(1.0);
     expect(GAME_PARAMS.threat.minStartLevel).toBe(-5);
     expect(GAME_PARAMS.threat.maxStartLevel).toBe(10);
     expect(GAME_PARAMS.threat.defaultStartLevel).toBe(0);
