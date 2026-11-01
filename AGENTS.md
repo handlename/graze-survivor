@@ -30,3 +30,38 @@
   - フィールド内発射パターン（`4: RING`, `6: VORTEX`, `7: FLOWER`, `8: LATTICE`, `9: STAR`）は、自機座標から `inFieldMinSafeDistance`（`110px`）以上離れた座標をサンプリングして発射原点とする（`pickInFieldSafeSpawnPoint`）。
 5. **段階的解禁と密度スケーリング**:
   - 脅威レベル（`level`、15秒ごとに +1）に応じて `0, 1`（Lv.0+）→ `2, 3`（Lv.1+）→ `4, 5`（Lv.2+）→ `6`（Lv.3+）→ `7`（Lv.4+）→ `8`（Lv.5+）→ `9`（Lv.6+）の順に解禁し、弾数・列数・分割数を段階的に増加させる。
+
+## 3. リザルトカード・ハイライト表示 (`share.ts`) の設計規約
+1. **アスペクト比保持と均一スケーリング**:
+  - 縦長の論理ゲーム画面（`360 × 640`）に対してリザルトカード（`600 × 400`）は横型であるため、上下の見切れを許容したうえで均一スケーリング（`PEAK_SCALE = 1.35`）で描画する。画面のアスペクト比を歪めてカードに押し込んではならない。
+2. **3段階の切り抜きカメラ優先順位 (`computeClampedPeakCamera`)**:
+  - **優先度1（最優先）**: 自機がリザルトカードの右半分（可視領域内 `[338..579] × [21..379]`）に必ず収まること。
+  - **優先度2**: 優先度1が満たされる範囲で、ピーク表示領域全体（枠内 `[210..589] × [11..389]`）にプレイ画面を隙間なく表示すること（端に黒帯・余白を出さない）。
+  - **優先度3**: 優先度1・2が満たされる範囲で、自機をピーク表示の中央 `(455, 200)` に表示すること。
+3. **左側グラデーションによるテキスト保護と境界線隠蔽**:
+  - リザルトカード左側の統計テキストの視認性を保つため、紙背景色（`PALETTE.bg`）の線形グラデーションを重ねる。
+  - プレイフィールド左端（`x = 0`）がカード上に投影される座標 + マージンまで背景色の不透明度 100% を保ち、そこから右へフェードアウトさせることで、プレイフィールド左端の切り抜き境界がうっすら見える現象を完全に防ぐ。
+4. **枠外はみ出し防止とマージンマスク**:
+  - Canvas 2D（特にモバイル WebKit の GPU ラスタライズ）において、大半径ストローク（ボムの衝撃波・予告リング等）やアンチエイリアスがクリップ境界を跨いで滲み出ることがある。
+  - これを防ぐため、ワールド座標での交差クリッピングに加え、外枠（`CARD_FRAME`）を描画する直前に枠外マージン（`x: 0..10`, `x: 590..600`, `y: 0..10`, `y: 390..400`）を背景色で塗りつぶす（マージンマスク）。
+  - バッジ（`PEAK PTS/s` 等）の背景も不透明な `PALETTE.bg` とし、背後のハザードが透けないようにする。
+
+## 4. 開発環境・ランタイムおよび実機検証サーバーの運用
+1. **ランタイムとツールの絶対パス**:
+  - 非対話型シェル環境では PATH が不足する場合があるため、以下の絶対パスを優先して直接呼び出す。
+    - Node: `/Users/handlename/.local/share/mise/shims/node`
+    - Bun: `/Users/handlename/.local/share/mise/shims/bun`
+    - Git: `/usr/bin/git`
+2. **スマホ実機検証用 HTTPS 開発サーバー**:
+  - iOS Safari 等のスマートフォンブラウザでジャイロセンサー（`DeviceMotionEvent` / `DeviceOrientationEvent`）やリザルトカード描画を検証するには、セキュアコンテキスト（HTTPS）が必須となる。
+  - プロジェクトルートの `certs/key.pem` / `certs/cert.pem` を使用して Vite HTTPS サーバーを起動する:
+    ```bash
+    /Users/handlename/.local/share/mise/shims/node ./node_modules/vite/bin/vite.js --config vite.https.config.ts
+    ```
+  - デフォルトでポート `5174`（`https://<LAN-IP>:5174/` や Tailscale IP）で待ち受ける。エージェントが実行する際はバックグラウンドタスク（`IsDaemon: true`）として常駐させ、ホットリロードにより即時実機確認できるようにする。
+3. **テスト・型検査・ビルドコマンド**:
+  - 単体テスト: `/Users/handlename/.local/share/mise/shims/node ./node_modules/vitest/vitest.mjs run`
+  - 特定テスト実行: `/Users/handlename/.local/share/mise/shims/node ./node_modules/vitest/vitest.mjs run tests/share.test.ts`
+  - 型チェック: `/Users/handlename/.local/share/mise/shims/node ./node_modules/typescript/bin/tsc --noEmit`
+  - 本番ビルド: `/Users/handlename/.local/share/mise/shims/node ./node_modules/vite/bin/vite.js build`
+
