@@ -386,8 +386,14 @@ export function stepGame(
         if (contact.kind === 'GRAZE') {
           activeGrazeSources += 1;
           let timer = hazard.grazeTimerMs + dtMs;
-          while (timer >= scoring.grazeTickMs) {
+          let currentGrazeCount = hazard.kind === 'BULLET' ? hazard.grazeCount : 0;
+          const maxTicks = hazard.kind === 'BULLET' ? params.bullet.maxGrazeTicks : Infinity;
+
+          while (timer >= scoring.grazeTickMs && currentGrazeCount < maxTicks) {
             timer -= scoring.grazeTickMs;
+            if (hazard.kind === 'BULLET') {
+              currentGrazeCount += 1;
+            }
             const reward = computeGrazeTickReward(contact.closeness, comboMultiplier, params);
             score += reward.scoreDelta;
             frameScoreGain += reward.scoreDelta;
@@ -432,7 +438,16 @@ export function stepGame(
               });
             }
           }
-          updatedHazards.push({ ...hazard, grazeTimerMs: timer });
+
+          if (hazard.kind === 'BULLET' && currentGrazeCount >= maxTicks) {
+            timer = 0;
+          }
+
+          updatedHazards.push(
+            hazard.kind === 'BULLET'
+              ? { ...hazard, grazeTimerMs: timer, grazeCount: currentGrazeCount }
+              : { ...hazard, grazeTimerMs: timer }
+          );
         } else {
           updatedHazards.push(
             hazard.grazeTimerMs !== 0 ? { ...hazard, grazeTimerMs: 0 } : hazard

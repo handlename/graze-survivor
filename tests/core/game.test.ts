@@ -11,7 +11,7 @@ import {
   GAME_TIPS,
   selectPreGameTip,
 } from '../../src/core/tips';
-import type { Hazard } from '../../src/core/types';
+import type { BulletHazard, Hazard } from '../../src/core/types';
 
 describe('core game engine loop', () => {
   it('stacks simultaneous graze ticks across multiple intersecting lasers and captures peak moment snapshot', () => {
@@ -279,5 +279,46 @@ describe('core game engine loop', () => {
     expect(afterStep.hazards.some((h) => h.kind === 'LASER')).toBe(false);
     expect(afterStep.hazards.some((h) => h.kind === 'BOMB')).toBe(false);
     expect(afterStep.hazards.filter((h) => h.kind === 'BULLET').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('caps bullet graze rewards at maxGrazeTicks (10 ticks) and ceases combo refresh', () => {
+    const initial = startNewGame(createInitialGameState());
+    const bullet: BulletHazard = {
+      id: 'test-bullet',
+      kind: 'BULLET',
+      x: 100,
+      y: 200,
+      vx: 0,
+      vy: 0,
+      radius: 4,
+      elapsedMs: 10,
+      warningDurationMs: 550,
+      grazeTimerMs: 0,
+      grazeCount: 9, // 1 tick away from cap (10)
+    };
+
+    const stateNearCap = {
+      ...initial,
+      player: { ...initial.player, x: 100, y: 208 },
+      hazards: [bullet],
+      nextBulletInMs: 9999,
+      nextLaserInMs: 9999,
+      nextBombInMs: 9999,
+    };
+
+    // 150ms step = normally 3 ticks, but only 1 remaining before cap of 10
+    const { state: afterOneTickStep, events: events1 } = stepGame(stateNearCap, 150, { dx: 0, dy: 0 });
+    expect(events1.grazeCount).toBe(1);
+    const bulletAfter1 = afterOneTickStep.hazards.find((h) => h.id === 'test-bullet') as BulletHazard;
+    expect(bulletAfter1.grazeCount).toBe(10);
+
+    const scoreAtCap = afterOneTickStep.score;
+    const comboAtCap = afterOneTickStep.comboMultiplier;
+
+    // Next step of 100ms: should yield 0 graze ticks, score and combo remain unchanged
+    const { state: afterExhaustedStep, events: events2 } = stepGame(afterOneTickStep, 100, { dx: 0, dy: 0 });
+    expect(events2.grazeCount).toBe(0);
+    expect(afterExhaustedStep.score).toBe(scoreAtCap);
+    expect(afterExhaustedStep.comboMultiplier).toBe(comboAtCap);
   });
 });

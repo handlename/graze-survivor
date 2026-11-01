@@ -44,6 +44,30 @@ describe('geometry & graze evaluation', () => {
     expect(evaluateHazardContact(100, 240, bullet)).toEqual({ kind: 'NONE' });
   });
 
+  it('returns NONE for graze range when bullet grazeCount reaches maxGrazeTicks, but still returns HIT on core collision', () => {
+    const exhaustedBullet: Hazard = {
+      id: 'b-exhausted',
+      kind: 'BULLET',
+      x: 100,
+      y: 200,
+      vx: 0,
+      vy: 100,
+      radius: 4,
+      elapsedMs: 100,
+      warningDurationMs: 550,
+      grazeTimerMs: 0,
+      grazeCount: 10,
+    };
+
+    // Near graze distance: coreRadius(3) < distToEdge(4) <= grazeRadius(24)
+    const grazeResult = evaluateHazardContact(100, 208, exhaustedBullet);
+    expect(grazeResult).toEqual({ kind: 'NONE' });
+
+    // Core hit distance: distToEdge(-1) <= coreRadius(3)
+    const hitResult = evaluateHazardContact(100, 206, exhaustedBullet);
+    expect(hitResult).toEqual({ kind: 'HIT' });
+  });
+
   it('ignores non-active bombs and warning-phase lasers, and evaluates active ones accurately', () => {
     const convergingBomb: Hazard = {
       id: 'bm1',

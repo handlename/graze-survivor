@@ -57,6 +57,9 @@ export function evaluateHazardContact(
         return { kind: 'NONE' };
       }
       const dist = distanceToPoint(px, py, hazard.x, hazard.y) - hazard.radius;
+      if (dist > params.player.coreRadius && hazard.grazeCount >= params.bullet.maxGrazeTicks) {
+        return { kind: 'NONE' };
+      }
       return classifyEdgeDistance(dist, params);
     }
     case 'BOMB': {
