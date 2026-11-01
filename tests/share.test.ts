@@ -8,6 +8,7 @@ import {
   type RankingRecord,
 } from '../src/core/types';
 import {
+  PUBLIC_GAME_URL,
   buildShareMessage,
   computeClampedPeakCamera,
   renderResultCardCanvas,
@@ -243,5 +244,6 @@ describe('renderResultCardCanvas - Peak Graze Moment Layout A (1.35x player-cent
 
     const msg = buildShareMessage(recordWithLevel, false);
     expect(msg).toContain('START LEVEL: LV.-3');
+    expect(msg).toContain(PUBLIC_GAME_URL);
   });
 });
